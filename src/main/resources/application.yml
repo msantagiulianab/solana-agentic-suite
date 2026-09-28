@@ -9,7 +9,7 @@ spring:
   # Defaults match the local docker-compose.yml container; override via
   # environment variables in deployed environments.
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/solana_payment_gateway}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/agentic_suite_db}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:postgres_secure_password}
     driver-class-name: org.postgresql.Driver

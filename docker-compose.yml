@@ -8,18 +8,18 @@
 services:
   solana-payment-gateway-db:
     image: postgres:16-alpine
-    container_name: solana-payment-gateway-db
+    container_name: solana-agentic-suite-db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: solana_payment_gateway
+      POSTGRES_DB: agentic_suite_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_secure_password
-    # ports:
-    #   - "5432:5432"
+    ports:
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d solana_payment_gateway"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agentic_suite_db"]
       interval: 5s
       timeout: 5s
       retries: 10
