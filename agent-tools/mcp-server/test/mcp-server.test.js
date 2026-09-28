@@ -323,3 +323,91 @@ test(
     }
   },
 );
+
+const RWA_WALLET = "4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y";
+const RWA_MINT = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+
+function startRwaGateway() {
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const signature = req.headers["payment-signature"];
+      if (!signature) {
+        const b64 = Buffer.from(JSON.stringify(CHALLENGE), "utf8").toString("base64");
+        res.writeHead(402, {
+          "content-type": "application/json",
+          "PAYMENT-REQUIRED": b64,
+        });
+        res.end(JSON.stringify(CHALLENGE));
+        return;
+      }
+
+      const payload = JSON.parse(body);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          walletAddress: payload.walletAddress,
+          assetMintAddress: payload.assetMintAddress,
+          attestationStatus: "COMPLIANT",
+          collateralRatio: "150.00",
+        }),
+      );
+    });
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () =>
+      resolve({ server, port: server.address().port }),
+    );
+  });
+}
+
+test(
+  "exposes and executes the rwa_attest MCP tool over stdio",
+  { timeout: 30000 },
+  async () => {
+    const gw = await startRwaGateway();
+    const transport = new StdioClientTransport({
+      command: process.execPath,
+      args: [SERVER_ENTRY],
+      env: {
+        ...process.env,
+        X402_RWA_ATTEST_URL: `http://127.0.0.1:${gw.port}`,
+        GATEWAY_BASE_URL: "http://127.0.0.1:9",
+      },
+    });
+    const client = new Client({ name: "test-agent", version: "1.0.0" });
+
+    try {
+      await client.connect(transport);
+
+      const tools = await client.listTools();
+      const tool = tools.tools.find((t) => t.name === "rwa_attest");
+      assert.ok(tool, "rwa_attest tool is registered");
+      assert.match(tool.description, /RWA/);
+
+      const result = await client.callTool({
+        name: "rwa_attest",
+        arguments: { walletAddress: RWA_WALLET, assetMintAddress: RWA_MINT },
+      });
+      const text = result.content.find((c) => c.type === "text")?.text ?? "";
+      const payload = JSON.parse(text);
+      assert.equal(payload.attestation.attestationStatus, "COMPLIANT");
+      assert.equal(payload.attestation.walletAddress, RWA_WALLET);
+      assert.equal(payload.attestation.assetMintAddress, RWA_MINT);
+      assert.equal(payload.telemetry.paymentRequired, true);
+      assert.ok(Number.isFinite(payload.telemetry.elapsedMs));
+
+      const invalid = await client.callTool({
+        name: "rwa_attest",
+        arguments: { walletAddress: "not-an-address", assetMintAddress: RWA_MINT },
+      });
+      assert.equal(invalid.isError, true);
+    } finally {
+      await client.close();
+      gw.server.close();
+    }
+  },
+);
+

@@ -41,6 +41,25 @@ export interface X402Challenge {
   message?: string;
 }
 
+export interface RwaAttestationTelemetry {
+  /** Wall-clock milliseconds for the full request (challenge + settle). */
+  elapsedMs: number;
+  /** Whether the gateway issued a 402 challenge and a voucher was settled. */
+  paymentRequired: boolean;
+  channelId: string;
+  payerPubkey: string;
+  /** Channel nonce consumed by the settlement voucher (0 when no payment). */
+  nonce: number;
+  /** Cumulative channel balance (atomic units) after the settlement. */
+  cumulativeAmountAtomic: number;
+}
+
+export interface RwaAttestationResult {
+  /** The raw HTTP 200 JSON attestation response from the RWA gateway. */
+  attestation: Record<string, unknown>;
+  telemetry: RwaAttestationTelemetry;
+}
+
 export interface X402ClientOptions {
   /** Gateway root URL. Defaults to X402_GATEWAY_URL (legacy fallback GATEWAY_BASE_URL) or https://msb-solana-enterprise-payment-gateway.duckdns.org. */
   baseUrl?: string;
@@ -52,6 +71,8 @@ export interface X402ClientOptions {
    * seed (sha256("smoke-test-payer-seed-v1")).
    */
   seed?: Uint8Array | string;
+  /** RWA attestation backend root URL. Defaults to X402_RWA_ATTEST_URL (legacy fallback RWA_ATTEST_URL) or http://localhost:8080. */
+  rwaAttestBaseUrl?: string;
   /** Injectable fetch implementation (for tests). Defaults to global fetch. */
   fetchImpl?: typeof fetch;
 }
@@ -70,6 +91,13 @@ export class X402ClientError extends Error {
 
 export const DEFAULT_GATEWAY_BASE_URL =
   "https://msb-solana-enterprise-payment-gateway.duckdns.org";
+
+/**
+ * Local Spring Boot RWA attestation backend (Solana Agentic Suite) root URL.
+ * Defaults to the localhost:8080 instance; override with X402_RWA_ATTEST_URL
+ * (legacy fallback RWA_ATTEST_URL).
+ */
+export const DEFAULT_RWA_ATTEST_BASE_URL = "http://localhost:8080";
 
 const DEFAULT_CHANNEL_ID = "chan_smoke_test_001";
 const DEFAULT_SEED_MATERIAL = "smoke-test-payer-seed-v1";
@@ -99,9 +127,22 @@ export function resolveChannelId(): string {
   );
 }
 
+/**
+ * Resolve the RWA attestation backend root URL, preferring
+ * `X402_RWA_ATTEST_URL` and falling back to the legacy `RWA_ATTEST_URL`.
+ */
+export function resolveRwaAttestBaseUrl(): string {
+  return (
+    process.env.X402_RWA_ATTEST_URL?.trim() ||
+    process.env.RWA_ATTEST_URL?.trim() ||
+    DEFAULT_RWA_ATTEST_BASE_URL
+  );
+}
+
 export class X402Client {
   private readonly baseUrl: string;
   private readonly channelId: string;
+  private readonly rwaAttestBaseUrl: string;
   private readonly keypair: Ed25519Keypair;
   private readonly payerPubkey: string;
   private readonly fetchImpl: typeof fetch;
@@ -113,6 +154,8 @@ export class X402Client {
     const resolvedBaseUrl = options.baseUrl ?? resolveGatewayBaseUrl();
     this.baseUrl = resolvedBaseUrl.replace(/\/+$/, "");
     this.channelId = options.channelId ?? resolveChannelId();
+    const resolvedRwaAttestBaseUrl = options.rwaAttestBaseUrl ?? resolveRwaAttestBaseUrl();
+    this.rwaAttestBaseUrl = resolvedRwaAttestBaseUrl.replace(/\/+$/, "");
     this.keypair = deriveKeypairFromSeed(resolveSeed(options.seed));
     this.payerPubkey = base58Encode(this.keypair.publicKey);
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
@@ -133,6 +176,45 @@ export class X402Client {
   async screenAddress(address: string): Promise<ScreeningResult> {
     const endpoint = `${this.baseUrl}/api/v1/compliance/screen-address`;
     const body = JSON.stringify({ address });
+    const { data } = await this.requestWithPayment(endpoint, body);
+    return data as ScreeningResult;
+  }
+
+  /**
+   * Executes an RWA collateral compliance attestation for a wallet against a
+   * Token-2022 asset mint, autonomously negotiating and settling the x402
+   * micro-payment. Returns the gateway's raw attestation JSON plus telemetry.
+   */
+  async attestRwa(walletAddress: string, assetMintAddress: string): Promise<RwaAttestationResult> {
+    const endpoint = `${this.rwaAttestBaseUrl}/api/v1/rwa/attest`;
+    const body = JSON.stringify({ walletAddress, assetMintAddress });
+
+    const { data, elapsedMs, paymentRequired } = await this.requestWithPayment(endpoint, body);
+
+    const telemetry: RwaAttestationTelemetry = {
+      elapsedMs,
+      paymentRequired,
+      channelId: this.channelId,
+      payerPubkey: this.payerPubkey,
+      nonce: toSafeNumber(this.lastNonce),
+      cumulativeAmountAtomic: toSafeNumber(this.cumulativeAmountAtomic),
+    };
+
+    const attestation =
+      data !== null && typeof data === "object" ? (data as Record<string, unknown>) : {};
+
+    return { attestation, telemetry };
+  }
+
+  /**
+   * Performs a single POST and, on a 402 challenge, signs and retries with the
+   * PAYMENT-SIGNATURE header. Shared by screenAddress and attestRwa.
+   */
+  private async requestWithPayment(
+    endpoint: string,
+    body: string,
+  ): Promise<{ data: unknown; elapsedMs: number; paymentRequired: boolean }> {
+    const startedAt = Date.now();
 
     let response = await this.fetchImpl(endpoint, {
       method: "POST",
@@ -140,7 +222,9 @@ export class X402Client {
       body,
     });
 
+    let paymentRequired = false;
     if (response.status === 402) {
+      paymentRequired = true;
       const challenge = await this.readChallenge(response);
       const voucherHeader = this.signVoucher(challenge.priceAtomicUnits);
       response = await this.fetchImpl(endpoint, {
@@ -157,7 +241,8 @@ export class X402Client {
       throw new X402ClientError(response.status, await safeText(response));
     }
 
-    return (await response.json()) as ScreeningResult;
+    const data = (await response.json()) as unknown;
+    return { data, elapsedMs: Date.now() - startedAt, paymentRequired };
   }
 
   private signVoucher(priceAtomicUnits?: number): string {

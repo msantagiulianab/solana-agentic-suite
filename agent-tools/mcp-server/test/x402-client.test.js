@@ -148,3 +148,83 @@ test("throws X402ClientError when the gateway rejects the voucher (403)", async 
     gw.server.close();
   }
 });
+
+const RWA_WALLET = "4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y";
+const RWA_MINT = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+
+function startRwaGateway() {
+  const state = { requests: [] };
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      const signature = req.headers["payment-signature"];
+      state.requests.push({ url: req.url, hasSignature: Boolean(signature), signature, body });
+
+      if (!signature) {
+        const b64 = Buffer.from(JSON.stringify(CHALLENGE), "utf8").toString("base64");
+        res.writeHead(402, {
+          "content-type": "application/json",
+          "PAYMENT-REQUIRED": b64,
+        });
+        res.end(JSON.stringify(CHALLENGE));
+        return;
+      }
+
+      const payload = JSON.parse(body);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          walletAddress: payload.walletAddress,
+          assetMintAddress: payload.assetMintAddress,
+          attestationStatus: "COMPLIANT",
+          collateralRatio: "150.00",
+          auditedAt: new Date().toISOString(),
+        }),
+      );
+    });
+  });
+
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () =>
+      resolve({ server, state, port: server.address().port }),
+    );
+  });
+}
+
+test("negotiates a 402 challenge and attests an RWA asset with telemetry", async () => {
+  const gw = await startRwaGateway();
+  try {
+    const client = new X402Client({
+      baseUrl: `http://127.0.0.1:${gw.port}`,
+      rwaAttestBaseUrl: `http://127.0.0.1:${gw.port}`,
+      channelId: "chan_smoke_test_001",
+    });
+    const result = await client.attestRwa(RWA_WALLET, RWA_MINT);
+
+    assert.equal(gw.state.requests.length, 2);
+    assert.match(gw.state.requests[0].url, /\/api\/v1\/rwa\/attest$/);
+    assert.equal(gw.state.requests[0].hasSignature, false);
+    assert.equal(gw.state.requests[1].hasSignature, true);
+
+    const firstBody = JSON.parse(gw.state.requests[0].body);
+    assert.equal(firstBody.walletAddress, RWA_WALLET);
+    assert.equal(firstBody.assetMintAddress, RWA_MINT);
+
+    const { voucher, valid } = verifyVoucherHeader(gw.state.requests[1].signature);
+    assert.equal(valid, true);
+
+    assert.equal(result.attestation.attestationStatus, "COMPLIANT");
+    assert.equal(result.attestation.walletAddress, RWA_WALLET);
+    assert.equal(result.attestation.assetMintAddress, RWA_MINT);
+
+    assert.equal(result.telemetry.paymentRequired, true);
+    assert.ok(Number.isFinite(result.telemetry.elapsedMs));
+    assert.equal(result.telemetry.channelId, "chan_smoke_test_001");
+    assert.equal(result.telemetry.nonce, voucher.nonce);
+    assert.equal(result.telemetry.cumulativeAmountAtomic, voucher.cumulativeAmountAtomic);
+  } finally {
+    gw.server.close();
+  }
+});
+

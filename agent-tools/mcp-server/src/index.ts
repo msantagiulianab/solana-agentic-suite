@@ -12,7 +12,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { base58Encode, isValidSolanaAddress, isValidSolanaIdentifier } from "./base58.js";
-import { resolveGatewayBaseUrl, resolveChannelId, X402Client, type ScreeningResult } from "./x402-client.js";
+import {
+  resolveGatewayBaseUrl,
+  resolveChannelId,
+  X402Client,
+  type RwaAttestationResult,
+  type ScreeningResult,
+} from "./x402-client.js";
 
 const TOOL_NAME = "screen_solana_address";
 const TOOL_DESCRIPTION = [
@@ -38,6 +44,17 @@ const solanaAddressSchema = z
   )
   .refine(isValidSolanaAddress, {
     message: "address must be a valid Base58 Solana public key (decodes to 32 bytes)",
+  });
+
+const assetMintAddressSchema = z
+  .string()
+  .describe(
+    "Base58-encoded Solana Token-2022 asset mint address (32-byte public key, 32-44 " +
+      "characters). Example: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'.",
+  )
+  .refine(isValidSolanaAddress, {
+    message:
+      "asset_mint_address must be a valid Base58 Solana public key (decodes to 32 bytes)",
   });
 
 const CHANNEL_STATUS_TOOL_NAME = "get_channel_status";
@@ -87,6 +104,21 @@ const VERIFY_PAYMENT_TOOL_DESCRIPTION = [
   "status semantics: 'valid' = proof well-formed but not yet settled (no channelId);",
   "'settled' = proof valid and settled on the supplied channelId; 'invalid' = proof is not a",
   "valid Base58 Solana address or transaction signature.",
+].join("\n");
+
+const RWA_ATTEST_TOOL_NAME = "rwa_attest";
+const RWA_ATTEST_TOOL_DESCRIPTION = [
+  "Execute an RWA (Real World Asset) collateral compliance attestation for a Solana",
+  "wallet against a Token-2022 asset mint address. This is the autonomous, network-bound",
+  "compliance check: it POSTs to the RWA attestation gateway, automatically negotiates",
+  "and settles an x402 micro-payment on a 402 challenge, and returns the final 200 OK",
+  "attestation verdict.",
+  "",
+  "Use this to attest that a wallet is compliant to hold or transact the given RWA asset",
+  "mint before authorizing token issuance or transfer.",
+  "",
+  "Returns a JSON object: { attestation: <gateway 200 OK JSON>, telemetry: { elapsedMs,",
+  "paymentRequired, channelId, payerPubkey, nonce, cumulativeAmountAtomic } }.",
 ].join("\n");
 
 const VERIFY_PAYMENT_AMOUNT_ATOMIC_UNITS = 5000;
@@ -161,6 +193,10 @@ export function formatScreeningResult(result: ScreeningResult): string {
     null,
     2,
   );
+}
+
+export function formatRwaAttestation(result: RwaAttestationResult): string {
+  return JSON.stringify(result, null, 2);
 }
 
 export interface ScreeningRecord {
@@ -418,6 +454,31 @@ export function createServer(client: X402Client): McpServer {
         return {
           isError: true,
           content: [{ type: "text" as const, text: `verify_x402_payment failed: ${message}` }],
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    RWA_ATTEST_TOOL_NAME,
+    {
+      description: RWA_ATTEST_TOOL_DESCRIPTION,
+      inputSchema: {
+        walletAddress: solanaAddressSchema,
+        assetMintAddress: assetMintAddressSchema,
+      },
+    },
+    async ({ walletAddress, assetMintAddress }) => {
+      try {
+        const result = await client.attestRwa(walletAddress, assetMintAddress);
+        return {
+          content: [{ type: "text" as const, text: formatRwaAttestation(result) }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [{ type: "text" as const, text: `rwa_attest failed: ${message}` }],
         };
       }
     },

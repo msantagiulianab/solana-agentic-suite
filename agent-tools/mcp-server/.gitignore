@@ -1,4 +1,5 @@
 node_modules/
+dist/
 *.log
 
 # MCP Publisher CLI binary
