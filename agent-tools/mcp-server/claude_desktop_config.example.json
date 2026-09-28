@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "solana-x402-compliance": {
+      "command": "npx",
+      "args": ["-y", "@msantagiulianab/x402-mcp-server"],
+      "env": {
+        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_CHANNEL_ID": "chan_smoke_test_001"
+      }
+    }
+  }
+}

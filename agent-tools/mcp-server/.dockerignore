@@ -1,0 +1,13 @@
+# Keep the build context small and force a clean compile from src/.
+node_modules
+dist
+test
+
+# Local/editor/build artifacts.
+*.log
+mcp-publisher.exe
+mcp-publisher
+mcp-publisher.tar.gz
+
+# VCS metadata.
+.git

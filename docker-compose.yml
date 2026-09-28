@@ -1,0 +1,48 @@
+# Local development infrastructure for the Solana Enterprise Payment Gateway.
+# Spins up PostgreSQL 16 (append-only x402 payment audit ledger) and the
+# containerized gateway application.
+#
+# Usage:
+#   docker compose up -d --build       # build & start the full stack
+#   docker compose down -v             # stop and wipe data volume
+services:
+  solana-payment-gateway-db:
+    image: postgres:16-alpine
+    container_name: solana-payment-gateway-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: solana_payment_gateway
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_secure_password
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d solana_payment_gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  solana-payment-gateway-app:
+    build: .
+    container_name: solana-payment-gateway-app
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://solana-payment-gateway-db:5432/solana_payment_gateway
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres_secure_password
+      X402_ESCROW_PUBKEY: ${X402_ESCROW_PUBKEY:-8cVJRRDjyrhWvag2h4nFvK4aBBxNmVo31a6zAX1eMtE4}
+      # Deterministic, offline mock mode keeps the local stack and the automated
+      # smoke test (smoke-test.sh) independent of devnet RPC flakiness and funded
+      # accounts. Set to "false" to exercise live devnet settlement sweeps.
+      SOLANA_RPC_MOCK_MODE: "true"
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+    depends_on:
+      solana-payment-gateway-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

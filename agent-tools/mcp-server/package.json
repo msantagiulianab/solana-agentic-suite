@@ -1,0 +1,61 @@
+{
+  "name": "@msantagiulianab/x402-mcp-server",
+  "version": "1.0.13",
+  "mcpName": "io.github.msantagiulianab/solana-x402-compliance",
+  "description": "Zero-bloat Model Context Protocol (MCP) server exposing the RFC 9110 x402 Solana compliance screening gateway to AI agents.",
+  "author": "Michele Santagiuliana Busellato",
+  "license": "MIT",
+  "homepage": "https://github.com/msantagiulianab/solana-enterprise-payment-gateway#readme",
+  "bugs": {
+    "url": "https://github.com/msantagiulianab/solana-enterprise-payment-gateway/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/msantagiulianab/solana-enterprise-payment-gateway.git",
+    "directory": "agent-tools/mcp-server"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "x402-mcp-server": "dist/index.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"fs.writeFileSync('dist/index.js', fs.readFileSync('dist/index.js', 'utf8').replace(/\\r\\n/g, '\\n'))\"",
+    "prepack": "npm run build",
+    "start": "node dist/index.js",
+    "test": "npm run build && node --test test/base58.test.js test/ed25519.test.js test/x402-client.test.js test/mcp-server.test.js",
+    "test:tool": "npm run build && node test-agent-call.js"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "modelcontextprotocol",
+    "x402",
+    "solana",
+    "compliance",
+    "sanctions",
+    "ofac",
+    "ed25519",
+    "micropayments",
+    "ai-agents"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.12.0",
+    "typescript": "^5.5.4"
+  }
+}

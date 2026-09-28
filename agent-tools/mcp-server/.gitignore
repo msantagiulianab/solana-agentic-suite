@@ -1,0 +1,7 @@
+node_modules/
+*.log
+
+# MCP Publisher CLI binary
+mcp-publisher.exe
+mcp-publisher
+mcp-publisher.tar.gz
