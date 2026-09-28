@@ -28,6 +28,12 @@
         -->
         <byte-buddy.version>1.17.8</byte-buddy.version>
         <mockito.version>5.20.0</mockito.version>
+        <!--
+            Override the Lombok version managed by Spring Boot 3.4.x. JDK 23+ silently
+            breaks annotation processing unless a recent Lombok is used; 1.18.42 is the
+            minimum that supports JDK 25 (the host JDK). Mirrors solana-rwa-enterprise-bridge.
+        -->
+        <lombok.version>1.18.42</lombok.version>
     </properties>
 
     <dependencies>
@@ -74,6 +80,23 @@
             <version>${bouncycastle.version}</version>
         </dependency>
 
+        <!--
+            Pure-Java Ed25519 (EdDSA) used to generate/sign Solana keypairs for
+            Token-2022 mint creation in the ported RWA issuance module.
+        -->
+        <dependency>
+            <groupId>net.i2p.crypto</groupId>
+            <artifactId>eddsa</artifactId>
+            <version>0.3.0</version>
+        </dependency>
+
+        <!-- Lombok: boilerplate reduction for the ported RWA entities/DTOs/services. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- JSON Processing -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -97,9 +120,37 @@
 
     <build>
         <plugins>
+            <!--
+                Enable full annotation processing and pin Lombok on the processor
+                path. JDK 23+ disables annotation processing by default, which
+                silently breaks Lombok (no builders/getters/setters generated).
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <release>${java.version}</release>
+                    <proc>full</proc>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
             </plugin>
         </plugins>
     </build>
