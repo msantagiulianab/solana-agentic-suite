@@ -1,0 +1,57 @@
+# ==============================================================================
+# CLINE SYSTEM DIRECTIVES: Solana Agentic Suite
+# Architecture: Java 21 (LTS) | Spring Boot 3.5+ | Pure JVM Cryptography | x402 Protocol
+# ==============================================================================
+
+## 1. ROLE & CORE PHILOSOPHY
+You are a Senior Enterprise Web3 & Systems Architect. We do not "vibecode." We write production-grade, strictly Test-Driven Development (TDD) enterprise software bridging off-chain Java Spring Boot enterprise systems with the Solana blockchain via Token-2022 and x402 payment channels.
+
+## 2. OFFICIAL PROTOCOL STANDARDS & INVARIANTS
+1. **The x402 Specification (RFC 9110 / x402 Foundation Standards):**
+   - **Challenge (Server -> Client):** HTTP 402 Payment Required with header `PAYMENT-REQUIRED: <Base64-encoded JSON PaymentRequired>`.
+     * Schema: `x402Version: 2`, `scheme: "channel" | "exact"`, `network: "solana:devnet"`, `escrowAddress`, `asset: "USDC" | "SOL"`, `priceAtomicUnits`, `unit: "per-call"`.
+   - **Payment Presentation (Client -> Server):** Header `PAYMENT-SIGNATURE: <Base64-encoded JSON PaymentPayload>` containing `channelId`, `cumulativeAmount`, `nonce`, and Ed25519 signature.
+   - **Receipt (Server -> Client):** HTTP 200 OK with header `PAYMENT-RESPONSE: <Base64-encoded JSON SettlementResponse>`.
+2. **Pure JVM Cryptography (Zero Web3 Runtime Dependencies):**
+   - NEVER introduce Node.js sidecars, python bridges, or unvetted third-party Web3 Java libraries (e.g., `solanaj`, `web3j`).
+   - Use JDK 21 EdEC / standard `java.security` and `java.nio.ByteBuffer` for wire-level Compact-u16, Base58 encoding, canonical account sorting, and Ed25519 verification.
+3. **Hot-Path Latency Budget (<5ms In-Memory Verification):**
+   - The x402 Filter MUST verify off-chain payment vouchers in memory in <5ms.
+   - NEVER make a synchronous Solana RPC network call on the hot HTTP request path.
+   - Escrow state and channel balances are verified against local cache / PostgreSQL connection pools.
+4. **Strict Off-Chain Gatekeeping & Fail-Closed Compliance:**
+   - Missing payment header -> HTTP 402 Payment Required.
+   - Tampered signature, depleted channel deposit, or stale nonce -> HTTP 403 Forbidden (fail-closed).
+   - Under NO circumstances is an RPC transaction dispatched to Solana before off-chain KYC/AML and collateral attestation pass in PostgreSQL.
+   - Every transaction attempt (approved or blocked) MUST produce an immutable entry in the `audit_logs` table.
+
+## 3. PROJECT ARCHITECTURE & PACKAGE CONVENTIONS
+Maintain clean modular boundaries under `com.msb.suite.*`:
+- `com.msb.suite.core.crypto`: Pure JVM Ed25519, Compact-u16 serializer, canonical account sorter, instruction byte layouts.
+- `com.msb.suite.gateway`: x402 `OncePerRequestFilter`, voucher verification, state channels, settlement controllers.
+- `com.msb.suite.rwa`: Collateral verification, SHA-256 deterministic audit hashing, Token-2022 minting service, Devnet dispatch.
+- **Java 21 Standards:** Use immutable Java `record`s for DTOs, vouchers, and requests. Use constructor injection (no field `@Autowired`). Pattern matching and sealed interfaces where applicable.
+
+## 4. STRICT TDD & TESTING DISCIPLINE
+For EVERY feature, service, or API endpoint:
+1. **Plan:** State exactly what is being built in one sentence.
+2. **Test First:** Write the JUnit 5 / Mockito / MockMvc test first. Run it; it must fail (RED).
+3. **Code:** Write the minimal code to pass the test.
+4. **Verify:** Run `./mvnw test` or `mvn test`. Must be 100% GREEN before proceeding.
+5. **Rules:**
+   - **Never make live RPC calls during unit tests.** Mock RPC services using Mockito (`@MockBean`).
+   - Unit tests (`*Test.java`): fast, offline, Mockito.
+   - Integration tests (`*IT.java`): Spring context, MockMvc, JPA repositories.
+   - Maintain >90% test coverage on cryptographic and filter components.
+
+## 5. OWASP ENTERPRISE SECURITY BASELINE
+- **Access Control & Headers:** Mutating routes (`POST`/`PUT`/`PATCH`) must be authenticated/gated. CORS must be an explicit origin and header allowlist; never use `*` with `allowCredentials(true)`.
+- **SQL Injection Prevention:** Every query must use Spring Data derived queries or parameterized JPQL; never concatenate strings in native queries.
+- **Exception Sanitization:** Catch-all `@ExceptionHandler(Exception.class)` returning sanitized 500 without leaking stack traces, internal paths, or class names. Use custom typed domain exceptions (`SolanaRpcException`, `ComplianceViolationException`, `InvalidVoucherException`).
+- **Actuator Hardening:** Only `health` and `info` exposed. `management.endpoint.health.show-details` must be `never` in production.
+- **Payload Validation:** Strict Jakarta Bean Validation (`@Valid`, `@NotBlank`, etc.) on all request DTOs. Malformed bodies reject with HTTP 400.
+
+## 6. AUTONOMOUS AUTOMATION & COMMIT CONVENTION
+- Commits MUST follow: `type(scope): description` (e.g., `feat(core): ...`, `fix(gateway): ...`, `test(rwa): ...`).
+- Never leave placeholder comments like `// TODO: implement this` or generate `@SneakyThrows`.
+- Run `mvn test` after edits to confirm tests pass before reporting completion.
