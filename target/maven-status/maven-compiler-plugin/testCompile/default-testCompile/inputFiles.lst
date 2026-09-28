@@ -9,3 +9,4 @@ C:\Development\solana-agentic-suite\src\test\java\com\msb\solana\gateway\seriali
 C:\Development\solana-agentic-suite\src\test\java\com\msb\solana\gateway\service\ChannelSettlementServiceTest.java
 C:\Development\solana-agentic-suite\src\test\java\com\msb\solana\gateway\service\PaymentAuditServiceTest.java
 C:\Development\solana-agentic-suite\src\test\java\com\msb\solana\gateway\service\SolanaEscrowVerifierTest.java
+C:\Development\solana-agentic-suite\src\test\java\com\msb\solana\rwa\controller\RwaAttestationIntegrationTest.java

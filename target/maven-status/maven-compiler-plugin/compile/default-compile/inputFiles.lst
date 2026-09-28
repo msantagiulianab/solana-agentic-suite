@@ -45,6 +45,7 @@ C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\gateway\service
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\gateway\service\PaymentAuditService.java
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\gateway\service\SolanaEscrowVerifier.java
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\gateway\SolanaPaymentGatewayApplication.java
+C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\rwa\controller\RwaAttestationController.java
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\rwa\entity\AssetToken.java
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\rwa\entity\AssetTokenComplianceStatus.java
 C:\Development\solana-agentic-suite\src\main\java\com\msb\solana\rwa\entity\AuditLog.java

@@ -28,7 +28,7 @@ import java.util.Arrays;
  * ever logged or persisted; only the derived public key is exposed at startup.
  */
 @Slf4j
-@Service
+@Service("rwaSolanaKeypairService")
 public class SolanaKeypairService {
 
     private static final int SEED_LENGTH = 32;

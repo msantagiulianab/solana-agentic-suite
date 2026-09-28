@@ -1,6 +1,6 @@
-# Solana Enterprise Payment Gateway
+# Solana Agentic Suite
 
-**High-Throughput HTTP 402 Payment Channel Middleware**
+**JVM-native Solana compliance, Token-2022 attestation, and x402 micro-payment channels**
 
 <p align="left">
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white" />
@@ -10,7 +10,7 @@
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white" />
   <img alt="x402 v2" src="https://img.shields.io/badge/x402-v2-9945FF" />
   <img alt="Ed25519" src="https://img.shields.io/badge/Ed25519-BouncyCastle-000000" />
-  <img alt="Tests 47" src="https://img.shields.io/badge/Tests-47_passed-brightgreen" />
+  <img alt="Tests 49" src="https://img.shields.io/badge/Tests-49_passed-brightgreen" />
   <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.msantagiulianab%2Fsolana-x402-compliance/versions/latest"><img src="https://img.shields.io/badge/MCP%20Registry-active-blue" alt="MCP Registry"></a>
   <a href="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway"><img src="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway/badges/score.svg" alt="Glama MCP"></a>
 </p>
@@ -21,14 +21,25 @@
 > `25-jre-alpine`). Both are stated explicitly because the host toolchain is JDK
 > 25 while the source level remains Java 21.
 
-An institutional-grade, **zero-Web3-SDK** middleware that meters HTTP APIs with
-the [x402](https://github.com/x402-foundation/x402) protocol and
+The **Solana Agentic Suite** is a single Spring Boot 3.4 / Java 21 runtime that
+fuses two complementary, zero-Web3-SDK engines behind one RFC-compliant
+[x402](https://github.com/x402-foundation/x402) /
 [RFC 9110 §15.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.3)
-`402 Payment Required` semantics. It validates Ed25519-signed, off-chain payment
-vouchers **in-memory in under 5ms** on the request hot path, persists every
-verification to an append-only PostgreSQL audit ledger, and sweeps cumulative
-channel balances on-chain in batched settlement transactions — all without any
-Node.js sidecar, Python bridge, or generic Web3 Java wrapper.
+`402 Payment Required` gateway:
+
+1. **Pure-JVM compliance & attestation engine (the RWA bridge).** Hand-rolled
+   Base58, `compact-u16`, canonical account sorting, Ed25519 (BouncyCastle), and
+   wire-level Token-2022 instruction builders drive off-chain KYC/AML gating,
+   SHA-256 audit hashing, and on-chain mint dispatch — with no Node.js sidecar,
+   Python bridge, or generic Web3 Java wrapper.
+2. **RFC-compliant x402 micro-payment channels.** A `OncePerRequestFilter`
+   validates Ed25519-signed, off-chain payment vouchers **in-memory in under
+   5ms** on the request hot path, persists every verification to an append-only
+   PostgreSQL audit ledger, and sweeps cumulative channel balances on-chain in
+   batched settlement transactions.
+
+Together they meter every `/api/v1/*` endpoint — including
+`POST /api/v1/rwa/attest` — behind the same `<5ms` fail-closed payment gate.
 
 ## AI Agent Integration (Model Context Protocol)
 
@@ -247,6 +258,11 @@ ChannelSettlementService (service)
 | `Ed25519SignatureVerifier` | `serialization` | BouncyCastle Ed25519 verify |
 | `SolanaKeypairService` | `serialization` | keypair derivation + in-process signing |
 | `Base58`, `CompactU16`, `SolanaAddressValidator` | `serialization` | zero-dependency codecs & validation |
+| `ComplianceService` | `rwa.service` | off-chain KYC/AML + asset-compliance gatekeeper (immutable audit log) |
+| `RwaAttestationController` | `rwa.controller` | `POST /api/v1/rwa/attest` — x402-protected attestation endpoint |
+| `TokenService`, `SolanaMintService` | `rwa.service` | Token-2022 mint issuance, idempotency + fail-closed pre-flight |
+| `SolanaRpcAdapter` | `rwa.rpc` | resilient JSON-RPC 2.0 client for the Token-2022 domain |
+| `InvestorRepository`, `AssetTokenRepository`, `AuditLogRepository` | `rwa.repository` | KYC/asset/audit persistence |
 
 ## 3. Complete Protocol Sequence Diagram
 
@@ -427,6 +443,17 @@ curl -i -X POST http://localhost:8080/api/v1/compliance/screen-address \
   -d '{"address":"4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y"}'
 # → HTTP/1.1 200, PAYMENT-RESPONSE: <Base64 receipt JSON>
 
+# 2b) x402-protected RWA attestation (unauthenticated → 402, then paid → 200)
+curl -i -X POST http://localhost:8080/api/v1/rwa/attest \
+  -H 'Content-Type: application/json' \
+  -d '{"walletAddress":"4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y","assetMintAddress":"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"}'
+# → HTTP/1.1 402, PAYMENT-REQUIRED: <Base64 challenge JSON>
+curl -i -X POST http://localhost:8080/api/v1/rwa/attest \
+  -H 'Content-Type: application/json' \
+  -H "PAYMENT-SIGNATURE: <Base64 voucher JSON>" \
+  -d '{"walletAddress":"4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y","assetMintAddress":"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"}'
+# → HTTP/1.1 200, PAYMENT-RESPONSE: <Base64 receipt JSON>, {"allowed":true,...}
+
 # 3) Administrative on-chain settlement sweep
 curl -i -X POST http://localhost:8080/api/v1/settlement/channels/chan_smoke_test_001/sweep
 # → HTTP/1.1 200 { "channelId": "...", "settledAmountAtomic": 5000, "txSignature": "...", ... }
@@ -439,7 +466,7 @@ The schema is owned exclusively by versioned **Flyway** migrations
 `spring.jpa.hibernate.ddl-auto: validate`, so Hibernate never emits DDL — it only
 verifies that the JPA entity maps onto the migrated schema.
 
-### `payment_audit_ledger` (V1 → V2)
+### `payment_audit_ledger` (V1 → V3)
 
 | Column | Type | Constraints | Notes |
 | --- | --- | --- | --- |
@@ -450,7 +477,7 @@ verifies that the JPA entity maps onto the migrated schema.
 | `nonce` | `bigint` | `NOT NULL`, `UNIQUE` w/ channel | anti-replay monotonic counter |
 | `signature` | `varchar(88)` | `NOT NULL` | Base58 Ed25519 voucher signature |
 | `status` | `varchar(32)` | `NOT NULL` | `VERIFIED` or `SETTLED` |
-| `tx_signature` | `varchar(88)` | `NULL` (V2) | on-chain sweep transaction signature |
+| `tx_signature` | `varchar(88)` | `NULL` (V3) | on-chain sweep transaction signature |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT NOW()` | immutable append timestamp |
 
 **Indexes**
@@ -464,9 +491,21 @@ verifies that the JPA entity maps onto the migrated schema.
 
 - **V1 — `V1__init_payment_audit_ledger.sql`** creates the table, the unique
   anti-replay index, and the two lookup indexes.
-- **V2 — `V2__add_settlement_tx_signature.sql`** adds the nullable
+- **V3 — `V3__add_settlement_tx_signature.sql`** adds the nullable
   `tx_signature` column so previously-appended `VERIFIED` rows remain valid until
   swept.
+
+### RWA domain tables (V2)
+
+Created by `V2__create_rwa_tables.sql`, ported verbatim from the
+`solana-rwa-enterprise-bridge` backend. These back the x402-protected
+`POST /api/v1/rwa/attest` endpoint.
+
+| Table | Purpose |
+| --- | --- |
+| `investors` | KYC/AML-gated investor records (unique `wallet_address`, indexed) |
+| `asset_tokens` | off-chain RWA registry with `mint_address`, compliance, and settlement status |
+| `audit_logs` | immutable, append-only compliance audit trail (approved or blocked) |
 
 ### Append-only contract
 
@@ -522,7 +561,7 @@ runtime, non-root `appuser`) and starts:
 | `solana-payment-gateway-app` | built from `./Dockerfile` | `8080` | Spring Boot gateway |
 
 The application waits for the database healthcheck, then applies the Flyway
-migrations (`V1`, `V2`) on startup.
+migrations (`V1`, `V2`, `V3`) on startup.
 
 ### 2. Automated end-to-end smoke test
 
@@ -552,9 +591,9 @@ on any failure:
 ./mvnw clean test
 ```
 
-Runs the full **47-test** JUnit 5 suite against an in-memory H2 database in
+Runs the full **49-test** JUnit 5 suite against an in-memory H2 database in
 PostgreSQL mode (`src/test/resources/application-test.yml`) with Flyway applying
-the same `V1`/`V2` migrations. RPC mock mode is enabled so the suite is
+the same `V1`/`V2`/`V3` migrations. RPC mock mode is enabled so the suite is
 deterministic and never dials an external Solana node.
 
 ```bash
@@ -773,36 +812,47 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
 ├── mvnw / mvnw.cmd / .mvn/wrapper/          # Maven wrapper (no system Maven needed)
 └── src
     ├── main
-    │   ├── java/com/msb/solana/gateway
-    │   │   ├── SolanaPaymentGatewayApplication.java
-    │   │   ├── compliance/        AddressRiskEvaluator, ThreatIntelligenceRegistry, ScreeningVerdict, ScreeningResult, ScreeningFlag
-    │   │   ├── config/            SolanaRpcConfig.java (JDK HttpClient bean)
-    │   │   ├── controller/        ComplianceScreeningController, SettlementController, X402DiscoveryController
-    │   │   ├── entity/            PaymentAuditRecord, PaymentAuditStatus
-    │   │   ├── filter/            X402PaymentFilter.java
-    │   │   ├── model/             PaymentRequiredChallenge, PaymentVoucher,
-    │   │   │                      PaymentSettlementReceipt, SettlementResult, X402DiscoveryResponse
-    │   │   ├── repository/        PaymentAuditRepository.java
-    │   │   ├── rpc/               SolanaRpcClient.java (+ model/* JSON-RPC DTOs)
-    │   │   ├── serialization/     Base58, CompactU16, AccountMeta, SolanaInstruction,
-    │   │   │                      SolanaKeypair, SolanaKeypairService,
-    │   │   │                      SolanaWireTransactionBuilder, Ed25519SignatureVerifier,
-    │   │   │                      SolanaAddressValidator
-    │   │   └── service/           ChannelVoucherVerifier, ChannelSettlementService,
-    │   │                          PaymentAuditService, SolanaEscrowVerifier,
-    │   │                          EscrowBalanceProvider
+    │   ├── java/com/msb/solana
+    │   │   ├── gateway
+    │   │   │   ├── SolanaPaymentGatewayApplication.java
+    │   │   │   ├── compliance/        AddressRiskEvaluator, ThreatIntelligenceRegistry, ScreeningVerdict, ScreeningResult, ScreeningFlag
+    │   │   │   ├── config/            SolanaRpcConfig.java (JDK HttpClient bean)
+    │   │   │   ├── controller/        ComplianceScreeningController, SettlementController, X402DiscoveryController
+    │   │   │   ├── entity/            PaymentAuditRecord, PaymentAuditStatus
+    │   │   │   ├── filter/            X402PaymentFilter.java
+    │   │   │   ├── model/             PaymentRequiredChallenge, PaymentVoucher,
+    │   │   │   │                      PaymentSettlementReceipt, SettlementResult, X402DiscoveryResponse
+    │   │   │   ├── repository/        PaymentAuditRepository.java
+    │   │   │   ├── rpc/               SolanaRpcClient.java (+ model/* JSON-RPC DTOs)
+    │   │   │   ├── serialization/     Base58, CompactU16, AccountMeta, SolanaInstruction,
+    │   │   │   │                      SolanaKeypair, SolanaKeypairService,
+    │   │   │   │                      SolanaWireTransactionBuilder, Ed25519SignatureVerifier,
+    │   │   │   │                      SolanaAddressValidator
+    │   │   │   └── service/           ChannelVoucherVerifier, ChannelSettlementService,
+    │   │   │                          PaymentAuditService, SolanaEscrowVerifier,
+    │   │   │                          EscrowBalanceProvider
+    │   │   └── rwa
+    │   │       ├── controller/        RwaAttestationController
+    │   │       ├── entity/            Investor, AssetToken, AuditLog (+ KYC/compliance/status enums)
+    │   │       ├── model/             ComplianceCheckRequest, ComplianceCheckResponse, AssetTokenRegistrationRequest
+    │   │       ├── repository/        InvestorRepository, AssetTokenRepository, AuditLogRepository
+    │   │       ├── rpc/               SolanaRpcAdapter (+ dto/* JSON-RPC DTOs)
+    │   │       ├── serialization/     Token-2022 wire builders, SolanaKeypairService, Base58Codec, SolanaPdaUtil
+    │   │       ├── service/           ComplianceService, TokenService, SolanaMintService
+    │   │       └── validation/        SolanaAddressValidator, ValidSolanaAddress
     │   └── resources/
     │       ├── application.yml
     │       └── db/migration/      V1__init_payment_audit_ledger.sql,
-    │                              V2__add_settlement_tx_signature.sql
+    │                              V2__create_rwa_tables.sql,
+    │                              V3__add_settlement_tx_signature.sql
     └── test
-        ├── java/...              11 test classes (47 tests)
+        ├── java/...              12 test classes (49 tests)
         └── resources/application-test.yml   # H2 (PostgreSQL mode) + mock RPC
 ```
 
 ## 11. Testing
 
-The suite runs **47 tests** across 11 classes with JUnit 5, Mockito, and MockMvc:
+The suite runs **49 tests** across 12 classes with JUnit 5, Mockito, and MockMvc:
 
 | Test class | Focus |
 | --- | --- |
@@ -818,6 +868,7 @@ The suite runs **47 tests** across 11 classes with JUnit 5, Mockito, and MockMvc
 | `SolanaRpcClientTest` | JSON-RPC request/response, mock signatures, fail-closed |
 | `CryptoPrimitivesTest` | Base58, compact-u16, Ed25519 round-trips |
 | `SolanaWireTransactionBuilderTest` | account sorting, header, discriminator, wire bytes |
+| `RwaAttestationIntegrationTest` | `POST /api/v1/rwa/attest`: unpaid → 402 challenge; paid → 200 + `PAYMENT-RESPONSE` + compliance verdict |
 
 The MockMvc integration tests verify the five mandated protocol outcomes:
 

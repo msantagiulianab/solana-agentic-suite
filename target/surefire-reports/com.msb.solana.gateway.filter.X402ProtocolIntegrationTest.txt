@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.msb.solana.gateway.filter.X402ProtocolIntegrationTest
+-------------------------------------------------------------------------------
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.067 s -- in com.msb.solana.gateway.filter.X402ProtocolIntegrationTest

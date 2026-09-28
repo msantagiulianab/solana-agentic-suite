@@ -1,5 +1,5 @@
 -- ============================================================================
--- V2__add_settlement_tx_signature.sql
+-- V3__add_settlement_tx_signature.sql
 -- Extends the append-only payment audit ledger with the on-chain settlement
 -- transaction signature recorded when a channel is swept to the treasury.
 --
