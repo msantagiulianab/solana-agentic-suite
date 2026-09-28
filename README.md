@@ -557,7 +557,7 @@ runtime, non-root `appuser`) and starts:
 
 | Service | Image | Port | Role |
 | --- | --- | --- | --- |
-| `solana-payment-gateway-db` | `postgres:16-alpine` | `5432` | append-only audit ledger |
+| `solana-agentic-suite-db` | `postgres:16-alpine` | `5433` | append-only audit ledger |
 | `solana-payment-gateway-app` | built from `./Dockerfile` | `8080` | Spring Boot gateway |
 
 The application waits for the database healthcheck, then applies the Flyway
@@ -609,7 +609,7 @@ binding maps uppercase/underscore environment variables onto these keys; explici
 | Property | Default | Environment override | Purpose |
 | --- | --- | --- | --- |
 | `server.port` | `8080` | `SERVER_PORT` | HTTP listen port |
-| `spring.datasource.url` | `jdbc:postgresql://localhost:5432/solana_payment_gateway` | `SPRING_DATASOURCE_URL` | JDBC URL |
+| `spring.datasource.url` | `jdbc:postgresql://localhost:5433/agentic_suite_db` | `SPRING_DATASOURCE_URL` | JDBC URL |
 | `spring.datasource.username` | `postgres` | `SPRING_DATASOURCE_USERNAME` | DB user |
 | `spring.datasource.password` | `postgres_secure_password` | `SPRING_DATASOURCE_PASSWORD` | DB password |
 | `spring.datasource.driver-class-name` | `org.postgresql.Driver` | — | JDBC driver |

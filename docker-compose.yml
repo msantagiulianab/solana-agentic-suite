@@ -30,7 +30,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://solana-payment-gateway-db:5432/solana_payment_gateway
+      SPRING_DATASOURCE_URL: jdbc:postgresql://solana-agentic-suite-db:5432/agentic_suite_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres_secure_password
       X402_ESCROW_PUBKEY: ${X402_ESCROW_PUBKEY:-8cVJRRDjyrhWvag2h4nFvK4aBBxNmVo31a6zAX1eMtE4}

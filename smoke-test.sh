@@ -34,8 +34,8 @@ AMOUNT_ATOMIC="${AMOUNT_ATOMIC:-5000}"
 NONCE="${NONCE:-1}"
 SCREEN_ADDRESS="${SCREEN_ADDRESS:-4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y}"
 
-DB_CONTAINER="${DB_CONTAINER:-solana-payment-gateway-db}"
-DB_NAME="${DB_NAME:-solana_payment_gateway}"
+DB_CONTAINER="${DB_CONTAINER:-solana-agentic-suite-db}"
+DB_NAME="${DB_NAME:-agentic_suite_db}"
 DB_USER="${DB_USER:-postgres}"
 
 COMPLIANCE_URL="${BASE_URL}/api/v1/compliance/screen-address"
