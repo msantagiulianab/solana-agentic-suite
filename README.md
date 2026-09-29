@@ -10,7 +10,7 @@
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white" />
   <img alt="x402 v2" src="https://img.shields.io/badge/x402-v2-9945FF" />
   <img alt="Ed25519" src="https://img.shields.io/badge/Ed25519-BouncyCastle-000000" />
-  <img alt="Tests 49" src="https://img.shields.io/badge/Tests-49_passed-brightgreen" />
+  <img alt="Tests 53" src="https://img.shields.io/badge/Tests-53_passed-brightgreen" />
   <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.msantagiulianab%2Fsolana-x402-compliance/versions/latest"><img src="https://img.shields.io/badge/MCP%20Registry-active-blue" alt="MCP Registry"></a>
   <a href="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway"><img src="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway/badges/score.svg" alt="Glama MCP"></a>
 </p>
@@ -591,7 +591,7 @@ on any failure:
 ./mvnw clean test
 ```
 
-Runs the full **49-test** JUnit 5 suite against an in-memory H2 database in
+Runs the full **53-test** JUnit 5 suite against an in-memory H2 database in
 PostgreSQL mode (`src/test/resources/application-test.yml`) with Flyway applying
 the same `V1`/`V2`/`V3` migrations. RPC mock mode is enabled so the suite is
 deterministic and never dials an external Solana node.
@@ -599,6 +599,70 @@ deterministic and never dials an external Solana node.
 ```bash
 ./mvnw spring-boot:run          # run locally (expects localhost PostgreSQL)
 ```
+
+### 4. Cockpit UI (Angular 18 Executive Dashboard)
+
+A lightweight Angular 18 single-page application under `cockpit-ui/` that renders
+real-time operational telemetry from the Spring Boot gateway:
+
+- **Autonomous x402 telemetry** — verified/settled micro-payment counts and the
+  in-memory voucher verification SLA budget.
+- **Fail-closed compliance verdicts** — the `APPROVED` vs `BLOCKED` attestation
+  block rate computed from the immutable RWA audit log.
+- **Live audit trail** — a newest-first table of transaction hashes, payer public
+  keys, timestamps, and verdicts, merged from both append-only ledgers
+  (`audit_logs` + `payment_audit_ledger`).
+
+The dashboard polls the read-only `GET /api/v1/rwa/audit` endpoint (exempt from
+the x402 payment filter) every 5 seconds, so new attestations and payments stream
+in without a manual refresh.
+
+#### Running locally
+
+```bash
+cd cockpit-ui
+npm install
+npm start
+```
+
+The dev server binds to **http://localhost:4200** and proxies `/api` to the
+Spring Boot gateway on **http://localhost:8080** (see `cockpit-ui/proxy.conf.json`),
+so no CORS configuration is required.
+
+#### End-to-end walkthrough
+
+Run each tier in its own terminal, then fire the autonomous agent demo:
+
+1. **Isolated database** (PostgreSQL 16 on `localhost:5433`):
+   ```bash
+   docker compose up -d solana-payment-gateway-db
+   ```
+
+2. **Spring Boot gateway** (applies Flyway `V1`/`V2`/`V3`, listens on `8080`):
+   ```bash
+   ./mvnw spring-boot:run
+   ```
+
+3. **Cockpit UI** (Angular dev server on `http://localhost:4200`):
+   ```bash
+   cd cockpit-ui && npm start
+   ```
+
+4. **Fire the autonomous agent demo** and watch the dashboard update in real
+   time:
+   ```bash
+   cd agent-tools/mcp-server && npx tsx src/live-demo.ts
+   ```
+
+   The demo performs an x402 `402` challenge → Ed25519 voucher →
+   `POST /api/v1/rwa/attest` round-trip against the gateway. Open
+   **http://localhost:4200** to watch the attestation count increment, the block
+   rate update, and a new transaction row stream into the "Recent Transactions"
+   table within one poll cycle (5s).
+
+   > **Append-only ledger.** Re-running the demo appends new rows (and advances
+   > the channel nonce); reset cleanly with
+   > `docker compose down -v && docker compose up -d --build`.
 
 ## 8. Configuration Parameters
 
@@ -846,13 +910,13 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
     │                              V2__create_rwa_tables.sql,
     │                              V3__add_settlement_tx_signature.sql
     └── test
-        ├── java/...              12 test classes (49 tests)
+        ├── java/...              14 test classes (53 tests)
         └── resources/application-test.yml   # H2 (PostgreSQL mode) + mock RPC
 ```
 
 ## 11. Testing
 
-The suite runs **49 tests** across 12 classes with JUnit 5, Mockito, and MockMvc:
+The suite runs **53 tests** across 14 classes with JUnit 5, Mockito, and MockMvc:
 
 | Test class | Focus |
 | --- | --- |
@@ -869,6 +933,8 @@ The suite runs **49 tests** across 12 classes with JUnit 5, Mockito, and MockMvc
 | `CryptoPrimitivesTest` | Base58, compact-u16, Ed25519 round-trips |
 | `SolanaWireTransactionBuilderTest` | account sorting, header, discriminator, wire bytes |
 | `RwaAttestationIntegrationTest` | `POST /api/v1/rwa/attest`: unpaid → 402 challenge; paid → 200 + `PAYMENT-RESPONSE` + compliance verdict |
+| `AuditDashboardServiceTest` | metrics aggregation: attestation/payment counts, fail-closed block rate, recent-transaction merge |
+| `AuditControllerIntegrationTest` | `GET /api/v1/rwa/audit` — un-gated read endpoint returns metrics + recent transactions |
 
 The MockMvc integration tests verify the five mandated protocol outcomes:
 

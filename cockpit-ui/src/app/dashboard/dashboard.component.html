@@ -1,0 +1,149 @@
+<div class='min-h-screen bg-slate-950 text-slate-100'>
+  <header class='sticky top-0 z-10 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur'>
+    <div class='mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8'>
+      <div class='flex items-center gap-3'>
+        <div class='flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 text-lg font-black text-slate-950'>S</div>
+        <div class='leading-tight'>
+          <h1 class='text-base font-semibold tracking-tight text-slate-100'>Solana Agentic Suite</h1>
+          <p class='text-xs text-slate-400'>RWA Compliance Cockpit</p>
+        </div>
+      </div>
+      <div class='flex items-center gap-3'>
+        <span class='hidden items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 sm:inline-flex'>
+          <span class='font-mono'>x402</span>
+          <span class='text-slate-600'>·</span>
+          <span class='font-mono'>solana:devnet</span>
+        </span>
+        <span class='inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300'>
+          <span class='relative flex h-2 w-2'>
+            <span class='absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75'></span>
+            <span class='relative inline-flex h-2 w-2 rounded-full bg-emerald-500'></span>
+          </span>
+          Live
+        </span>
+      </div>
+    </div>
+  </header>
+  <main class='mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8'>
+    <div class='mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between'>
+      <div>
+        <h2 class='text-2xl font-semibold tracking-tight'>Compliance Overview</h2>
+        <p class='mt-1 text-sm text-slate-400'>Real-time audit trail and x402 payment telemetry from the gateway.</p>
+      </div>
+      <p class='text-xs text-slate-500'>
+        @if (lastUpdated) {
+          Last updated {{ lastUpdated | date:'mediumTime' }} · refreshes every 5s
+        } @else {
+          Awaiting first sync…
+        }
+      </p>
+    </div>
+    @if (error) {
+      <div class='mb-6 flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200'>
+        <svg class='mt-0.5 h-5 w-5 shrink-0 text-rose-400' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'>
+          <path stroke-linecap='round' stroke-linejoin='round' d='M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z'/>
+        </svg>
+        <div>
+          <p class='font-medium'>Unable to load live audit data</p>
+          <p class='mt-0.5 text-rose-300/80'>{{ error }}</p>
+        </div>
+      </div>
+    }
+    <section class='grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4'>
+      <article class='rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/50'>
+        <div class='flex items-center justify-between'>
+          <div class='flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400'>
+            <svg class='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z'/></svg>
+          </div>
+          <span class='rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-300'>RWA</span>
+        </div>
+        <p class='mt-4 text-sm font-medium text-slate-400'>Total Attestations</p>
+        <p class='mt-1 text-3xl font-semibold tracking-tight'>{{ metrics.totalAttestations | number }}</p>
+        <p class='mt-1 text-xs text-slate-500'>Compliance checks recorded</p>
+      </article>
+      <article class='rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/50'>
+        <div class='flex items-center justify-between'>
+          <div class='flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400'>
+            <svg class='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M13 10V3L4 14h7v7l9-11h-7z'/></svg>
+          </div>
+          <span class='rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-cyan-300'>x402</span>
+        </div>
+        <p class='mt-4 text-sm font-medium text-slate-400'>Autonomous x402 Micro-Payments Processed</p>
+        <p class='mt-1 text-3xl font-semibold tracking-tight'>{{ metrics.x402PaymentsProcessed | number }}</p>
+        <p class='mt-1 text-xs text-slate-500'>Settled off-chain, swept on-chain</p>
+      </article>
+      <article class='rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/50'>
+        <div class='flex items-center justify-between'>
+          <div class='flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400'>
+            <svg class='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'/></svg>
+          </div>
+          <span class='rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-300'>&lt;5ms SLA</span>
+        </div>
+        <p class='mt-4 text-sm font-medium text-slate-400'>Average Latency (ms)</p>
+        <p class='mt-1 text-3xl font-semibold tracking-tight'>{{ metrics.averageLatencyMs | number:'1.0-1' }}<span class='ml-1 text-base font-normal text-slate-500'>ms</span></p>
+        <p class='mt-1 text-xs text-slate-500'>In-memory voucher verification</p>
+      </article>
+      <article class='rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-lg shadow-slate-950/50'>
+        <div class='flex items-center justify-between'>
+          <div class='flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-400'>
+            <svg class='h-5 w-5' fill='none' viewBox='0 0 24 24' stroke='currentColor' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636'/></svg>
+          </div>
+          <span class='rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-300'>Fail-Closed</span>
+        </div>
+        <p class='mt-4 text-sm font-medium text-slate-400'>Fail-Closed Compliance Block Rate</p>
+        <p class='mt-1 text-3xl font-semibold tracking-tight'>{{ metrics.blockRatePercent | number:'1.0-1' }}<span class='ml-1 text-base font-normal text-slate-500'>%</span></p>
+        <p class='mt-1 text-xs text-slate-500'>KYC/AML gatekeeper denials</p>
+      </article>
+    </section>
+    <section class='mt-8 overflow-hidden rounded-xl border border-slate-800 bg-slate-900 shadow-lg shadow-slate-950/50'>
+      <div class='flex items-center justify-between border-b border-slate-800 px-6 py-4'>
+        <div>
+          <h3 class='text-sm font-semibold text-slate-100'>Recent Transactions</h3>
+          <p class='mt-0.5 text-xs text-slate-500'>Append-only audit ledger · newest first</p>
+        </div>
+        <span class='rounded-full border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-xs font-medium text-slate-300'>
+          {{ transactions.length }} records
+        </span>
+      </div>
+      <div class='overflow-x-auto'>
+        <table class='w-full min-w-[640px] text-sm'>
+          <thead>
+            <tr class='border-b border-slate-800 text-left text-xs uppercase tracking-wider text-slate-400'>
+              <th class='px-6 py-3.5 font-medium'>Transaction Hash</th>
+              <th class='px-6 py-3.5 font-medium'>Payer Public Key</th>
+              <th class='px-6 py-3.5 font-medium'>Timestamp</th>
+              <th class='px-6 py-3.5 text-right font-medium'>Verdict</th>
+            </tr>
+          </thead>
+          <tbody class='divide-y divide-slate-800'>
+            @if (loading && transactions.length === 0) {
+              <tr>
+                <td colspan='4' class='px-6 py-14 text-center text-slate-500'>
+                  <span class='inline-flex items-center gap-2'>
+                    <span class='h-4 w-4 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-400'></span>
+                    Fetching audit trail…
+                  </span>
+                </td>
+              </tr>
+            } @else {
+              @for (tx of transactions; track tx.id) {
+                <tr class='transition-colors hover:bg-slate-800/40'>
+                  <td class='px-6 py-4 font-mono text-xs text-slate-300'>{{ shorten(tx.transactionHash) }}</td>
+                  <td class='px-6 py-4 font-mono text-xs text-slate-400'>{{ shorten(tx.payerPublicKey, 8, 6) }}</td>
+                  <td class='px-6 py-4 text-xs text-slate-400'>{{ tx.timestamp | date:'medium' }}</td>
+                  <td class='px-6 py-4 text-right'>
+                    <span [class]='verdictBadgeClasses(tx.status)'>{{ tx.status | titlecase }}</span>
+                  </td>
+                </tr>
+              } @empty {
+                <tr>
+                  <td colspan='4' class='px-6 py-14 text-center text-slate-500'>No transactions recorded yet.</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
