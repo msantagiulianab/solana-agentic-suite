@@ -53,6 +53,10 @@ public class X402PaymentFilter extends OncePerRequestFilter {
         if (path.startsWith("/.well-known/")) {
             return true;
         }
+        // Read-only cockpit observability endpoint; not a metered x402 resource.
+        if (path.startsWith("/api/v1/rwa/audit")) {
+            return true;
+        }
         return !path.startsWith("/api/v1/");
     }
 

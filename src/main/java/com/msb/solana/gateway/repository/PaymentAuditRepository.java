@@ -2,6 +2,7 @@ package com.msb.solana.gateway.repository;
 
 import com.msb.solana.gateway.entity.PaymentAuditRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,4 +23,6 @@ public interface PaymentAuditRepository extends JpaRepository<PaymentAuditRecord
     Optional<PaymentAuditRecord> findTopByChannelIdOrderByNonceDesc(String channelId);
 
     boolean existsByChannelIdAndNonce(String channelId, long nonce);
+
+    List<PaymentAuditRecord> findAllByOrderByCreatedAtDesc(Pageable pageable);
 }

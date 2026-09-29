@@ -40,6 +40,7 @@ x402:
   escrow-pubkey: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
   asset: "USDC"
   price-atomic-units: 5000
+  latency-sla-ms: 5
   unit: "per-call"
 
 solana:
