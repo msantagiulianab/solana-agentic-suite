@@ -79,7 +79,7 @@ class AuditControllerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.metrics.totalAttestations").value(2))
                 .andExpect(jsonPath("$.metrics.x402PaymentsProcessed").value(2))
-                .andExpect(jsonPath("$.metrics.averageLatencyMs").value(5.0))
+                .andExpect(jsonPath("$.metrics.averageLatencyMs").value(10.0))
                 .andExpect(jsonPath("$.metrics.blockRatePercent").value(50.0))
                 .andExpect(jsonPath("$.recentTransactions", hasSize(4)))
                 .andExpect(jsonPath("$.recentTransactions[*].status",

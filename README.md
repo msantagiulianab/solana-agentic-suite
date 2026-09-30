@@ -34,12 +34,12 @@ fuses two complementary, zero-Web3-SDK engines behind one RFC-compliant
    Python bridge, or generic Web3 Java wrapper.
 2. **RFC-compliant x402 micro-payment channels.** A `OncePerRequestFilter`
    validates Ed25519-signed, off-chain payment vouchers **in-memory in under
-   5ms** on the request hot path, persists every verification to an append-only
+   10ms** on the request hot path, persists every verification to an append-only
    PostgreSQL audit ledger, and sweeps cumulative channel balances on-chain in
    batched settlement transactions.
 
 Together they meter every `/api/v1/*` endpoint — including
-`POST /api/v1/rwa/attest` — behind the same `<5ms` fail-closed payment gate.
+`POST /api/v1/rwa/attest` — behind the same `<10ms` fail-closed payment gate.
 
 ## AI Agent Integration (Model Context Protocol)
 
@@ -188,7 +188,7 @@ transaction** using the x402 HTTP challenge-and-response protocol:
    issues a `PAYMENT-REQUIRED` challenge to unauthenticated callers and accepts a
    `PAYMENT-SIGNATURE` voucher on retry, attaching a `PAYMENT-RESPONSE` receipt
    on success.
-3. **< 5ms hot path.** Voucher verification is pure in-memory Ed25519 crypto plus
+3. **< 10ms hot path.** Voucher verification is pure in-memory Ed25519 crypto plus
    a short-TTL cache of the escrow balance. **No synchronous Solana RPC call is
    ever made on the HTTP request path.**
 4. **Batched on-chain settlement.** An administrative endpoint sweeps a channel's
@@ -319,7 +319,7 @@ The full x402 challenge-and-response lifecycle across the client, the gateway
 
 Key invariant: **steps 4–6 never touch the network.** The only RPC interactions
 are the off-path settlement sweep (step 8), keeping the request hot path
-deterministic and sub-5ms.
+deterministic and sub-10ms.
 
 ## 4. Cryptographic & Voucher Wire Specification
 

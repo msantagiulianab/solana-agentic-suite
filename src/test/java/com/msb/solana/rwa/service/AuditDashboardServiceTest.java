@@ -35,7 +35,7 @@ class AuditDashboardServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AuditDashboardService(auditLogRepository, paymentAuditRepository, 5.0, 50);
+        service = new AuditDashboardService(auditLogRepository, paymentAuditRepository, 10.0, 50);
     }
 
     @Test
@@ -49,7 +49,7 @@ class AuditDashboardServiceTest {
 
         assertThat(metrics.totalAttestations()).isEqualTo(3L);
         assertThat(metrics.x402PaymentsProcessed()).isEqualTo(7L);
-        assertThat(metrics.averageLatencyMs()).isEqualTo(5.0);
+        assertThat(metrics.averageLatencyMs()).isEqualTo(10.0);
         assertThat(metrics.blockRatePercent()).isEqualTo(33.3);
     }
 

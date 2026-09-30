@@ -17,7 +17,7 @@ import java.util.concurrent.ConcurrentMap;
  *
  * <p>In production ({@code solana.rpc.mock-mode: false}) the escrow balance is
  * resolved from a Solana RPC {@code getAccountInfo} query keyed to the channel.
- * The result is cached for a short TTL so the x402 hot path stays &lt;5ms on a
+ * The result is cached for a short TTL so the x402 hot path stays &lt;10ms on a
  * cache hit and never performs a synchronous RPC call on the request path.
  *
  * <p>When mock mode is enabled the verifier never touches the network and

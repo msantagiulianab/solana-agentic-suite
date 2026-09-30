@@ -9,7 +9,7 @@ import java.time.Instant;
  * Evaluates a raw Solana address against the threat intelligence registry.
  *
  * <p>Validation and matching run entirely in memory (no RPC calls) so the
- * screening endpoint stays within the sub-5ms hot-path latency budget.
+ * screening endpoint stays within the sub-10ms hot-path latency budget.
  */
 @Service
 public class AddressRiskEvaluator {

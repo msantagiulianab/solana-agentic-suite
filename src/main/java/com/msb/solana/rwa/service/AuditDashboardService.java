@@ -42,7 +42,7 @@ public class AuditDashboardService {
     public AuditDashboardService(
             AuditLogRepository auditLogRepository,
             PaymentAuditRepository paymentAuditRepository,
-            @Value("${x402.latency-sla-ms:5}") double latencySlaMs,
+            @Value("${x402.latency-sla-ms:10}") double latencySlaMs,
             @Value("${audit.dashboard.recent-limit:50}") int recentTransactionLimit) {
         this.auditLogRepository = auditLogRepository;
         this.paymentAuditRepository = paymentAuditRepository;
