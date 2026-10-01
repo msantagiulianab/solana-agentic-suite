@@ -61,7 +61,7 @@ export interface RwaAttestationResult {
 }
 
 export interface X402ClientOptions {
-  /** Gateway root URL. Defaults to X402_GATEWAY_URL (legacy fallback GATEWAY_BASE_URL) or https://msb-solana-enterprise-payment-gateway.duckdns.org. */
+  /** Gateway root URL. Defaults to X402_GATEWAY_URL (legacy fallback GATEWAY_BASE_URL) or http://localhost:8080. */
   baseUrl?: string;
   /** x402 payment channel id. Defaults to X402_CHANNEL_ID (legacy fallback CHANNEL_ID) or chan_smoke_test_001. */
   channelId?: string;
@@ -89,8 +89,7 @@ export class X402ClientError extends Error {
   }
 }
 
-export const DEFAULT_GATEWAY_BASE_URL =
-  "https://msb-solana-enterprise-payment-gateway.duckdns.org";
+export const DEFAULT_GATEWAY_BASE_URL = "http://localhost:8080";
 
 /**
  * Local Spring Boot RWA attestation backend (Solana Agentic Suite) root URL.

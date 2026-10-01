@@ -10,17 +10,19 @@ screen: it receives the HTTP `402 Payment Required` challenge, signs an
 Ed25519 channel voucher in-memory (Node.js built-in `crypto`, no Web3 SDK), and
 retries with a `PAYMENT-SIGNATURE` header.
 
-## Standalone npm package
+## Local monorepo component
 
-The server is published to the npm registry as a standalone package — no clone
-or build step is required to run it:
+The server runs locally from this monorepo checkout. Install, build, and start
+it over stdio:
 
 ```bash
-npx -y @msantagiulianab/x402-mcp-server
+npm install
+npm run build
+npm start
 ```
 
-See [`package.json`](./package.json) for the current version and metadata. The
-package ships the compiled ESM `dist/` bundle plus this README and the LICENSE.
+The build compiles `src/` into the ESM `dist/` bundle. See
+[`package.json`](./package.json) for the current version and metadata.
 
 ## Layout
 
@@ -49,9 +51,7 @@ npm run build          # tsc -> dist/ (ESM)
 ## Run (stdio transport)
 
 ```bash
-npx -y @msantagiulianab/x402-mcp-server   # published package
-# or, from a local checkout:
-npm start
+npm start                # runs the local build (node dist/index.js)
 # or: node dist/index.js
 ```
 
@@ -59,7 +59,7 @@ Environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `X402_GATEWAY_URL` | `https://msb-solana-enterprise-payment-gateway.duckdns.org` | Gateway root URL |
+| `X402_GATEWAY_URL` | `http://localhost:8080` | Gateway root URL |
 | `X402_CHANNEL_ID` | `chan_smoke_test_001` | x402 payment channel id |
 | `X402_PRIVATE_KEY_SEED` | sha256 of `smoke-test-payer-seed-v1` | 64-hex or UTF-8 material seed |
 
@@ -110,18 +110,18 @@ repository. Changes flow differently depending on where they live:
 | Where the change lives | Sync / deploy action |
 | --- | --- |
 | **Java backend** (`src/main/...`) | Push to GitHub, then `git pull` on the Hetzner VPS to rebuild/restart the container or jar. |
-| **MCP server** (`agent-tools/mcp-server/src/...`) | Bump `version` in `package.json`, then `npm publish`. |
-| **Documentation / `smithery.yaml`** (`README.md`, `smithery.yaml`) | Push to GitHub only — no VPS reload and no `npm publish` required. |
+| **MCP server** (`agent-tools/mcp-server/src/...`) | Rebuild locally with `npm run build` and restart the process. |
+| **Documentation / `smithery.yaml`** (`README.md`, `smithery.yaml`) | Push to GitHub only — no VPS reload and no rebuild required. |
 
 > The backend and the MCP server deploy independently: a Java change does not
-> require an `npm publish`, and an MCP change does not require a VPS reload.
+> require an MCP rebuild, and an MCP change does not require a VPS reload.
 > Documentation and registry metadata (`smithery.yaml`) ship purely via GitHub.
 
 ### `smithery.yaml`
 
 [`smithery.yaml`](./smithery.yaml) is the [Smithery](https://smithery.ai)
 registry manifest. It declares the stdio `startCommand`
-(`npx -y @msantagiulianab/x402-mcp-server`) and exposes two configurable fields
+(`node agent-tools/mcp-server/dist/index.js`) and exposes two configurable fields
 — `gatewayUrl` and `channelId` — which map onto the `X402_GATEWAY_URL` and
 `X402_CHANNEL_ID` environment variables. Updating it only requires a GitHub
 push; the Smithery registry indexes it directly from the repository.
@@ -185,10 +185,10 @@ Add to `claude_desktop_config.json`:
 {
   "mcpServers": {
     "solana-x402-compliance": {
-      "command": "npx",
-      "args": ["-y", "@msantagiulianab/x402-mcp-server"],
+      "command": "node",
+      "args": ["agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -203,9 +203,9 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "solana-x402-compliance": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@msantagiulianab/x402-mcp-server"],
+      "args": ["/c", "node", "agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -221,10 +221,10 @@ Add to `cline_mcp_settings.json`:
 {
   "mcpServers": {
     "solana-x402-compliance": {
-      "command": "npx",
-      "args": ["-y", "@msantagiulianab/x402-mcp-server"],
+      "command": "node",
+      "args": ["agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -235,11 +235,11 @@ Add to `cline_mcp_settings.json`:
 ### Cursor
 
 Add an MCP server entry (Settings → MCP) pointing at the same
-`npx -y @msantagiulianab/x402-mcp-server` command with the environment
+`node agent-tools/mcp-server/dist/index.js` command with the environment
 variables above.
 
 ### ElizaOS
 
 Register a stdio-based MCP client plugin using the same
-`npx -y @msantagiulianab/x402-mcp-server` command; the tool
+`node agent-tools/mcp-server/dist/index.js` command; the tool
 `screen_solana_address` becomes callable by the agent.

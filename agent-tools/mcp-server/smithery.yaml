@@ -7,7 +7,7 @@ startCommand:
       gatewayUrl:
         type: string
         description: "URL of the Solana x402 compliance gateway"
-        default: "https://msb-solana-enterprise-payment-gateway.duckdns.org"
+        default: "http://localhost:8080"
       channelId:
         type: string
         description: "Payment channel identifier for x402 settlement"
@@ -17,7 +17,7 @@ startCommand:
       command: 'node',
       args: ['agent-tools/mcp-server/dist/index.js'],
       env: {
-        X402_GATEWAY_URL: config.gatewayUrl || 'https://msb-solana-enterprise-payment-gateway.duckdns.org',
+        X402_GATEWAY_URL: config.gatewayUrl || 'http://localhost:8080',
         X402_CHANNEL_ID: config.channelId || 'chan_smoke_test_001'
       }
     })

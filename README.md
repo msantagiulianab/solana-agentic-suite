@@ -45,19 +45,25 @@ Together they meter every `/api/v1/*` endpoint — including
 
 > **Watch (2 min):** Technical walkthrough covering pure Java 21 gateway architecture, fail-closed compliance guardrails, and sub-10ms x402 payment voucher verification.
 
-## AI Agent Integration (Model Context Protocol)
+## Model Context Protocol (MCP) Server
 
 Autonomous AI agents can screen Solana addresses and settle compliance
-micro-payments through our published [Model Context Protocol](https://modelcontextprotocol.io)
-(MCP) server. The server is a **zero-dependency** x402 compliance tool: it speaks
-the RFC 9110 `402 Payment Required` challenge-and-response protocol natively,
-signs Ed25519 channel vouchers in-memory (Node.js built-in `crypto`, no Web3
-SDK), and negotiates settlement on every call.
+micro-payments through the included [Model Context Protocol](https://modelcontextprotocol.io)
+(MCP) server, located at [`/agent-tools/mcp-server`](./agent-tools/mcp-server).
+The server is a **zero-dependency** x402 compliance tool: it speaks the RFC 9110
+`402 Payment Required` challenge-and-response protocol natively, signs Ed25519
+channel vouchers in-memory (Node.js built-in `crypto`, no Web3 SDK), and
+negotiates settlement on every call.
 
-### Direct Execution
+- **Implementation:** TypeScript ([`agent-tools/mcp-server/src`](./agent-tools/mcp-server/src))
+
+### Build & Run
 
 ```bash
-npx -y @msantagiulianab/x402-mcp-server
+cd agent-tools/mcp-server
+npm install
+npm run build
+npm start
 ```
 
 ### Configuration
@@ -66,7 +72,7 @@ The server reads two environment variables:
 
 | Variable | Value | Purpose |
 | --- | --- | --- |
-| `X402_GATEWAY_URL` | `https://msb-solana-enterprise-payment-gateway.duckdns.org` | Gateway root URL |
+| `X402_GATEWAY_URL` | `http://localhost:8080` | Gateway root URL |
 | `X402_CHANNEL_ID` | `chan_smoke_test_001` | x402 payment channel id |
 
 #### Claude Desktop
@@ -79,10 +85,10 @@ Add an entry to `claude_desktop_config.json`.
 {
   "mcpServers": {
     "solana-x402-compliance": {
-      "command": "npx",
-      "args": ["-y", "@msantagiulianab/x402-mcp-server"],
+      "command": "node",
+      "args": ["agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -97,9 +103,9 @@ Add an entry to `claude_desktop_config.json`.
   "mcpServers": {
     "solana-x402-compliance": {
       "command": "cmd",
-      "args": ["/c", "npx", "-y", "@msantagiulianab/x402-mcp-server"],
+      "args": ["/c", "node", "agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -115,10 +121,10 @@ Add the server to `cline_mcp_settings.json`:
 {
   "mcpServers": {
     "solana-x402-compliance": {
-      "command": "npx",
-      "args": ["-y", "@msantagiulianab/x402-mcp-server"],
+      "command": "node",
+      "args": ["agent-tools/mcp-server/dist/index.js"],
       "env": {
-        "X402_GATEWAY_URL": "https://msb-solana-enterprise-payment-gateway.duckdns.org",
+        "X402_GATEWAY_URL": "http://localhost:8080",
         "X402_CHANNEL_ID": "chan_smoke_test_001"
       }
     }
@@ -134,15 +140,6 @@ The `screen_solana_address` tool returns one of two verified outcomes:
 | --- | --- | --- | --- |
 | Clear counterparty | `0` | `CLEAR_TO_TRANSACT` | none |
 | Malicious / sanctioned counterparty | `100` | `BLOCKED` | `OFAC_SANCTIONED` / drainer detection (`EXPLOIT_DRAINER`) |
-
-
-## Model Context Protocol (MCP) Server
-
-This repository contains the official open-source MCP server implementation located at [`/agent-tools/mcp-server`](./agent-tools/mcp-server).
-
-- **Implementation:** TypeScript ([`agent-tools/mcp-server/src`](./agent-tools/mcp-server/src))
-- **NPM Package:** [`@msantagiulianab/x402-mcp-server`](https://www.npmjs.com/package/@msantagiulianab/x402-mcp-server)
-- **Executable:** `npx -y @msantagiulianab/x402-mcp-server`
 
 ---
 
@@ -880,6 +877,8 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
 ├── docker-compose.yml                       # PostgreSQL 16 + gateway app
 ├── smoke-test.sh                            # 5-stage end-to-end x402 verification
 ├── mvnw / mvnw.cmd / .mvn/wrapper/          # Maven wrapper (no system Maven needed)
+├── cockpit-ui/                              # Angular 18 executive telemetry dashboard
+├── agent-tools/mcp-server/                  # TypeScript zero-dependency x402 MCP server and demo runners
 └── src
     ├── main
     │   ├── java/com/msb/solana
