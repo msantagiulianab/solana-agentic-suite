@@ -6,7 +6,7 @@
 #   docker compose up -d --build       # build & start the full stack
 #   docker compose down -v             # stop and wipe data volume
 services:
-  solana-payment-gateway-db:
+  solana-agentic-suite-db:
     image: postgres:16-alpine
     container_name: solana-agentic-suite-db
     restart: unless-stopped
@@ -33,14 +33,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://solana-agentic-suite-db:5432/agentic_suite_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres_secure_password
-      X402_ESCROW_PUBKEY: ${X402_ESCROW_PUBKEY:-8cVJRRDjyrhWvag2h4nFvK4aBBxNmVo31a6zAX1eMtE4}
+      X402_ESCROW_PUBKEY: ${X402_ESCROW_PUBKEY:-7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU}
       # Deterministic, offline mock mode keeps the local stack and the automated
       # smoke test (smoke-test.sh) independent of devnet RPC flakiness and funded
       # accounts. Set to "false" to exercise live devnet settlement sweeps.
       SOLANA_RPC_MOCK_MODE: "true"
       SOLANA_RPC_URL: https://api.devnet.solana.com
     depends_on:
-      solana-payment-gateway-db:
+      solana-agentic-suite-db:
         condition: service_healthy
     restart: unless-stopped
 

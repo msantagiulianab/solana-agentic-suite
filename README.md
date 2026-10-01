@@ -11,8 +11,6 @@
   <img alt="x402 v2" src="https://img.shields.io/badge/x402-v2-9945FF" />
   <img alt="Ed25519" src="https://img.shields.io/badge/Ed25519-BouncyCastle-000000" />
   <img alt="Tests 53" src="https://img.shields.io/badge/Tests-53_passed-brightgreen" />
-  <a href="https://registry.modelcontextprotocol.io/v0.1/servers/io.github.msantagiulianab%2Fsolana-x402-compliance/versions/latest"><img src="https://img.shields.io/badge/MCP%20Registry-active-blue" alt="MCP Registry"></a>
-  <a href="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway"><img src="https://glama.ai/mcp/servers/msantagiulianab/solana-enterprise-payment-gateway/badges/score.svg" alt="Glama MCP"></a>
 </p>
 
 > **Language / runtime note.** The Maven build targets **Java 21** bytecode
@@ -497,8 +495,8 @@ verifies that the JPA entity maps onto the migrated schema.
 
 ### RWA domain tables (V2)
 
-Created by `V2__create_rwa_tables.sql`, ported verbatim from the
-`solana-rwa-enterprise-bridge` backend. These back the x402-protected
+Created by `V2__create_rwa_tables.sql`, Integrated from the enterprise RWA
+compliance engine with pure-JVM zero-dependency wire serialization. These back the x402-protected
 `POST /api/v1/rwa/attest` endpoint.
 
 | Table | Purpose |
@@ -635,7 +633,7 @@ Run each tier in its own terminal, then fire the autonomous agent demo:
 
 1. **Isolated database** (PostgreSQL 16 on `localhost:5433`):
    ```bash
-   docker compose up -d solana-payment-gateway-db
+   docker compose up -d solana-agentic-suite-db
    ```
 
 2. **Spring Boot gateway** (applies Flyway `V1`/`V2`/`V3`, listens on `8080`):
@@ -879,7 +877,7 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
     │   ├── java/com/msb/solana
     │   │   ├── gateway
     │   │   │   ├── SolanaPaymentGatewayApplication.java
-    │   │   │   ├── compliance/        AddressRiskEvaluator, ThreatIntelligenceRegistry, ScreeningVerdict, ScreeningResult, ScreeningFlag
+    │   │   │   ├── compliance/        AddressRiskEvaluator, ThreatIntelligenceRegistry, ScreeningVerdict, ScreeningResult, ScreeningFlag, ComplianceExceptionHandler, InvalidSolanaAddressException, RiskCategory, ScreenAddressRequest, ThreatIntelligenceEntry
     │   │   │   ├── config/            SolanaRpcConfig.java (JDK HttpClient bean)
     │   │   │   ├── controller/        ComplianceScreeningController, SettlementController, X402DiscoveryController
     │   │   │   ├── entity/            PaymentAuditRecord, PaymentAuditStatus
@@ -896,9 +894,9 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
     │   │   │                          PaymentAuditService, SolanaEscrowVerifier,
     │   │   │                          EscrowBalanceProvider
     │   │   └── rwa
-    │   │       ├── controller/        RwaAttestationController
+    │   │       ├── controller/        RwaAttestationController, AuditController
     │   │       ├── entity/            Investor, AssetToken, AuditLog (+ KYC/compliance/status enums)
-    │   │       ├── model/             ComplianceCheckRequest, ComplianceCheckResponse, AssetTokenRegistrationRequest
+    │   │       ├── model/             ComplianceCheckRequest, ComplianceCheckResponse, AssetTokenRegistrationRequest, AuditDashboardResponse
     │   │       ├── repository/        InvestorRepository, AssetTokenRepository, AuditLogRepository
     │   │       ├── rpc/               SolanaRpcAdapter (+ dto/* JSON-RPC DTOs)
     │   │       ├── serialization/     Token-2022 wire builders, SolanaKeypairService, Base58Codec, SolanaPdaUtil
