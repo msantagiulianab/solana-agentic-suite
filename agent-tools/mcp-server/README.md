@@ -155,6 +155,24 @@ This exercises the tool handler against `http://localhost:8080`:
 - Clean address `4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y` → `CLEAR_TO_TRANSACT`.
 - Flagged address `Fc1EwQUZyTEagaDvA1utHXCcZNyG1x2PLt2DfNu1cJdH` → `BLOCKED`.
 
+### Autonomous agent RWA attestation demo runners
+
+Two symmetrical demo runners exercise the full `402` challenge → Ed25519 voucher →
+`POST /api/v1/rwa/attest` round-trip against `http://localhost:8080`, demonstrating
+both sides of the off-chain gatekeeper:
+
+```bash
+npm run demo:approved   # Happy path: investor KYC verified, clearance granted (allowed: true)
+npm run demo:blocked    # Fail-closed path: unaccredited/unregistered wallet blocked (allowed: false)
+```
+
+- `demo:approved` attests the verified, funded investor key
+  `DoD8TaZaTENh68nkBwZDH4ovRYBwbeTEYATUEDtHT98v` and expects `allowed: true`.
+- `demo:blocked` attests an unregistered/unaccredited wallet
+  `9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin`, settles the same sub-10ms
+  x402 micro-payment, then fails closed with `allowed: false` and a logged
+  compliance reason.
+
 ## Client configuration
 
 ### Claude Desktop

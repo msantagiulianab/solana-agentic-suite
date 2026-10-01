@@ -35,7 +35,9 @@
     "prepack": "npm run build",
     "start": "node dist/index.js",
     "test": "npm run build && node --test test/base58.test.js test/ed25519.test.js test/x402-client.test.js test/mcp-server.test.js",
-    "test:tool": "npm run build && node test-agent-call.js"
+    "test:tool": "npm run build && node test-agent-call.js",
+    "demo:approved": "tsx src/demo-approved.ts",
+    "demo:blocked": "tsx src/demo-blocked.ts"
   },
   "keywords": [
     "mcp",

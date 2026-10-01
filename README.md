@@ -649,7 +649,9 @@ Run each tier in its own terminal, then fire the autonomous agent demo:
 4. **Fire the autonomous agent demo** and watch the dashboard update in real
    time:
    ```bash
-   cd agent-tools/mcp-server && npx tsx src/live-demo.ts
+   cd agent-tools/mcp-server
+   npm run demo:approved    # Happy path: investor KYC verified → allowed: true
+   npm run demo:blocked     # Fail-closed path: unaccredited wallet → allowed: false
    ```
 
    The demo performs an x402 `402` challenge → Ed25519 voucher →
