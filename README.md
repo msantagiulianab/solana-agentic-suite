@@ -39,6 +39,12 @@ fuses two complementary, zero-Web3-SDK engines behind one RFC-compliant
 Together they meter every `/api/v1/*` endpoint — including
 `POST /api/v1/rwa/attest` — behind the same `<10ms` fail-closed payment gate.
 
+## 📺 Architecture & Live Demo Walkthrough
+
+[![Solana Agentic Suite Walkthrough](https://img.youtube.com/vi/1K0cWbcOBrw/maxresdefault.jpg)](https://youtu.be/1K0cWbcOBrw)
+
+> **Watch (2 min):** Technical walkthrough covering pure Java 21 gateway architecture, fail-closed compliance guardrails, and sub-10ms x402 payment voucher verification.
+
 ## AI Agent Integration (Model Context Protocol)
 
 Autonomous AI agents can screen Solana addresses and settle compliance
