@@ -1,6 +1,8 @@
 # Solana Agentic Suite
 
-**JVM-native Solana compliance, Token-2022 attestation, and x402 micro-payment channels**
+**A zero-Web3-SDK JVM architecture for Solana compliance, Token-2022 attestation, and RFC 9110 HTTP 402 x402 micro-payment channels.**
+
+> 🎬 **[▶ Watch the 2-minute demo walkthrough](https://youtu.be/1K0cWbcOBrw)**
 
 <p align="left">
   <img alt="Java 21" src="https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white" />
@@ -38,6 +40,10 @@ fuses two complementary, zero-Web3-SDK engines behind one RFC-compliant
 
 Together they meter every `/api/v1/*` endpoint — including
 `POST /api/v1/rwa/attest` — behind the same `<10ms` fail-closed payment gate.
+Every micro-payment and RWA compliance attestation is adjudicated off-chain
+(KYC/AML gating and collateral attestation) and **fails closed**: a missing,
+tampered, or replayed proof is rejected with `402`/`403` and logged to the
+immutable audit ledger.
 
 ## 📺 Architecture & Live Demo Walkthrough
 
@@ -467,6 +473,13 @@ The schema is owned exclusively by versioned **Flyway** migrations
 `spring.jpa.hibernate.ddl-auto: validate`, so Hibernate never emits DDL — it only
 verifies that the JPA entity maps onto the migrated schema.
 
+| Migration | File | Purpose |
+| --- | --- | --- |
+| **V1** | `V1__init_payment_audit_ledger.sql` | creates the append-only `payment_audit_ledger` with anti-replay indexes |
+| **V2** | `V2__create_rwa_tables.sql` | creates the RWA domain tables (`investors`, `asset_tokens`, `audit_logs`) |
+| **V3** | `V3__add_settlement_tx_signature.sql` | adds the nullable `tx_signature` column to `payment_audit_ledger` |
+| **V4** | `V4__seed_compliance_demo_data.sql` | idempotently seeds baseline investor + asset demo data |
+
 ### `payment_audit_ledger` (V1 → V3)
 
 | Column | Type | Constraints | Notes |
@@ -507,6 +520,18 @@ compliance engine with pure-JVM zero-dependency wire serialization. These back t
 | `investors` | KYC/AML-gated investor records (unique `wallet_address`, indexed) |
 | `asset_tokens` | off-chain RWA registry with `mint_address`, compliance, and settlement status |
 | `audit_logs` | immutable, append-only compliance audit trail (approved or blocked) |
+
+### Seed data (V4)
+
+`V4__seed_compliance_demo_data.sql` safely seeds the baseline **test investor** and
+**asset** records consumed by the autonomous agent demo. Both inserts use
+`ON CONFLICT DO UPDATE`, so the migration is **idempotent**: re-running it against
+an already-seeded database converges to the same state instead of duplicating rows.
+
+- **Investor** — `Alice Verified` (`alice@verified.com`), KYC `VERIFIED`, US
+  jurisdiction, wallet `DoD8TaZaTENh68nkBwZDH4ovRYBwbeTEYATUEDtHT98v`.
+- **Asset** — `Treasury Bill 2026`, `COMPLIANT` / `FINALIZED`, mint
+  `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`.
 
 ### Append-only contract
 
@@ -562,7 +587,7 @@ runtime, non-root `appuser`) and starts:
 | `solana-payment-gateway-app` | built from `./Dockerfile` | `8080` | Spring Boot gateway |
 
 The application waits for the database healthcheck, then applies the Flyway
-migrations (`V1`, `V2`, `V3`) on startup.
+migrations (`V1`–`V4`) on startup.
 
 ### 2. Automated end-to-end smoke test
 
@@ -594,7 +619,7 @@ on any failure:
 
 Runs the full **53-test** JUnit 5 suite against an in-memory H2 database in
 PostgreSQL mode (`src/test/resources/application-test.yml`) with Flyway applying
-the same `V1`/`V2`/`V3` migrations. RPC mock mode is enabled so the suite is
+the same `V1`–`V4` migrations. RPC mock mode is enabled so the suite is
 deterministic and never dials an external Solana node.
 
 ```bash
@@ -639,7 +664,7 @@ Run each tier in its own terminal, then fire the autonomous agent demo:
    docker compose up -d solana-agentic-suite-db
    ```
 
-2. **Spring Boot gateway** (applies Flyway `V1`/`V2`/`V3`, listens on `8080`):
+2. **Spring Boot gateway** (applies Flyway `V1`–`V4`, listens on `8080`):
    ```bash
    ./mvnw spring-boot:run
    ```
@@ -649,16 +674,29 @@ Run each tier in its own terminal, then fire the autonomous agent demo:
    cd cockpit-ui && npm start
    ```
 
-4. **Fire the autonomous agent demo** and watch the dashboard update in real
-   time:
+4. **Run the autonomous agent demo scripts** and watch the dashboard update in
+   real time. These zero-dependency TypeScript agents (in
+   `agent-tools/mcp-server/`) negotiate the RFC 9110 x402 challenge-and-response
+   protocol against the gateway — no Web3 SDK required:
+
    ```bash
    cd agent-tools/mcp-server
+   npm install              # first run only
    npm run demo:approved    # Happy path: investor KYC verified → allowed: true
    npm run demo:blocked     # Fail-closed path: unaccredited wallet → allowed: false
    ```
 
-   The demo performs an x402 `402` challenge → Ed25519 voucher →
-   `POST /api/v1/rwa/attest` round-trip against the gateway. Open
+   Each script drives an x402 `402` challenge → Ed25519 voucher →
+   `POST /api/v1/rwa/attest` round-trip against the gateway:
+
+   - `demo:approved` attests the verified, funded investor
+     `DoD8TaZaTENh68nkBwZDH4ovRYBwbeTEYATUEDtHT98v` and expects `allowed: true`.
+   - `demo:blocked` attests the unregistered/unaccredited wallet
+     `9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin`, settles the same sub-10ms
+     micro-payment, then fails closed with `allowed: false` and a logged
+     compliance reason.
+
+   With all three tiers running, open the real-time Cockpit UI at
    **http://localhost:4200** to watch the attestation count increment, the block
    rate update, and a new transaction row stream into the "Recent Transactions"
    table within one poll cycle (5s).
@@ -913,7 +951,8 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
     │       ├── application.yml
     │       └── db/migration/      V1__init_payment_audit_ledger.sql,
     │                              V2__create_rwa_tables.sql,
-    │                              V3__add_settlement_tx_signature.sql
+    │                              V3__add_settlement_tx_signature.sql,
+    │                              V4__seed_compliance_demo_data.sql
     └── test
         ├── java/...              14 test classes (53 tests)
         └── resources/application-test.yml   # H2 (PostgreSQL mode) + mock RPC
