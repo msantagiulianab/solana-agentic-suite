@@ -22,7 +22,7 @@
 The **Solana Agentic Suite** is a single Spring Boot 3.4 / Java 21 runtime that
 fuses two complementary, zero-Web3-SDK engines behind one RFC-compliant
 [x402](https://github.com/x402-foundation/x402) /
-[RFC 9110 §15.5.3](https://www.rfc-editor.org/rfc/rfc9110#section-15.5.3)
+[RFC 9110 §15.5.3](https://datatracker.ietf.org/doc/html/rfc9110#section-15.5.3)
 `402 Payment Required` gateway:
 
 1. **Pure-JVM compliance & attestation engine (the RWA bridge).** Hand-rolled
