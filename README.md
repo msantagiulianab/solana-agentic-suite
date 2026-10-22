@@ -12,7 +12,7 @@
   <img alt="Docker Compose" src="https://img.shields.io/badge/Docker_Compose-2496ED?logo=docker&logoColor=white" />
   <img alt="x402 v2" src="https://img.shields.io/badge/x402-v2-9945FF" />
   <img alt="Ed25519" src="https://img.shields.io/badge/Ed25519-BouncyCastle-000000" />
-  <img alt="Tests 53" src="https://img.shields.io/badge/Tests-53_passed-brightgreen" />
+  <img alt="Tests 84" src="https://img.shields.io/badge/Tests-84_passed-brightgreen" />
 </p>
 
 > **Language / runtime note.** The Maven build targets **Java 21** bytecode
@@ -258,8 +258,8 @@ ChannelSettlementService (service)
 | `ChannelVoucherVerifier` | `service` | in-memory anti-replay + signature + escrow-ceiling checks |
 | `SolanaEscrowVerifier` | `service` | on-chain escrow balance with short-TTL cache (`EscrowBalanceProvider`) |
 | `PaymentAuditService` | `service` | append-only audit persistence |
-| `ChannelSettlementService` | `service` | on-chain sweep + `VERIFIED → SETTLED` transition |
-| `PaymentAuditRepository` | `repository` | read/insert only (no update/delete declared) |
+| `ChannelSettlementService` | `service` | 3-phase on-chain sweep (`VERIFIED → SETTLING → SETTLED`) with HikariCP decoupling |
+| `PaymentAuditRepository` | `repository` | append-only voucher fields; guarded settlement state transitions only |
 | `SolanaRpcClient` | `rpc` | fail-closed JSON-RPC 2.0 (`getAccountInfo`, `getLatestBlockhash`, `sendTransaction`) |
 | `SolanaWireTransactionBuilder` | `serialization` | legacy tx wire format, account sorting, SOL/SPL instructions |
 | `Ed25519SignatureVerifier` | `serialization` | BouncyCastle Ed25519 verify |
@@ -535,33 +535,96 @@ an already-seeded database converges to the same state instead of duplicating ro
 
 ### Append-only contract
 
-The table is **append-only by contract**: the application never issues `UPDATE`
-or `DELETE` against it, the `PaymentAuditRepository` declares no mutation methods
-beyond `save` (insert), and the JPA entity exposes no mutators other than the
-single legal state transition below.
+The table is **append-only by contract** for its signed voucher fields: the
+application never issues `DELETE`, and the only permitted `UPDATE`s are the four
+guarded settlement lifecycle transitions declared on `PaymentAuditRepository`
+(`claimForSettlement`, `completeSettlement`, `markSettlementFailed`,
+`releaseSettlementClaim`). Those queries change only `status` and `tx_signature` —
+never `channel_id`, `payer_pubkey`, `cumulative_amount_atomic`, `nonce`, or
+`signature` — and each is gated by a conditional `WHERE status = :expected`
+clause. The JPA entity exposes a single defensive mutator, `markSettled(...)`;
+production settlement uses the guarded repository transitions described below.
 
 ### Channel state lifecycle
 
+The settlement state machine has four states. Production settlement drives every
+transition through the guarded `PaymentAuditRepository` bulk queries, so each
+change is a conditional `UPDATE ... WHERE status = :expected` that can succeed at
+most once:
+
 ```
-        voucher verified & appended
-   ┌──────────────────────────────────▶  VERIFIED
-   │                                        │
-   │                                        │  ChannelSettlementService.settleChannel()
-   │                                        │  → record.markSettled(txSignature)
-   │                                        ▼
-   └────────────────────────────────────  SETTLED
+                       voucher verified & appended
+     ┌──────────────────────────────────────────────────▶ VERIFIED
+     │                                                        │
+     │                                        claimForSettlement()      (Phase 1)
+     │                                        VERIFIED → SETTLING
+     │                                                        ▼
+     │                                                     SETTLING
+     │                                                        │
+     │        releaseSettlementClaim()       ┌────────────────┴─────────────────┐
+     │        (no broadcast attempted)       │                                  │  markSettlementFailed()
+     │        SETTLING → VERIFIED            ▼                                  ▼  (ambiguous broadcast)
+     │          (channel retryable)     [on-chain broadcast]            SETTLEMENT_FAILED
+     │                                        │                            (terminal)
+     │                                        │ completeSettlement()      (Phase 3)
+     │                                        ▼ SETTLING → SETTLED
+     └────────────────────────────────────────┴──────────────────────────▶ SETTLED
 ```
 
-`PaymentAuditRecord.markSettled(txSignature)` enforces the only legal transition:
-
-- `VERIFIED → SETTLED` — allowed only once a non-blank `txSignature` is supplied.
-- Any other transition (e.g. `SETTLED → SETTLED`, or `null → SETTLED`) throws
-  `IllegalStateException`.
+- `VERIFIED → SETTLING` — `claimForSettlement(...)`; the atomic claim taken
+  **before** any broadcast so exactly one concurrent sweep can win.
+- `SETTLING → SETTLED` — `completeSettlement(..., txSignature)`; persists the
+  confirmed on-chain transaction signature.
+- `SETTLING → SETTLEMENT_FAILED` — `markSettlementFailed(...)`; a terminal state
+  used when the broadcast outcome is ambiguous. It never reverts to `VERIFIED`,
+  so a retry cannot double-spend without manual reconciliation.
+- `SETTLING → VERIFIED` — `releaseSettlementClaim(...)`; used only when the sweep
+  never started (no recent blockhash), leaving the channel retryable.
 
 The `ChannelSettlementService` sweeps the **highest-nonce** `VERIFIED` record for
 a channel (`findTopByChannelIdOrderByNonceDesc`) — because cumulative amounts are
 monotonic, the latest record already represents the full outstanding balance, and
 settling it atomically closes the channel.
+
+### 3-Phase Settlement Architecture (HikariCP Decoupling)
+
+`ChannelSettlementService.settleChannel()` executes every sweep as **three
+committed phases** so an external Solana RPC round-trip (typically 400 ms – 2 s+)
+never pins a HikariCP database connection. Each database mutation runs inside its
+own `TransactionTemplate` boundary; the outbound network calls run with **zero DB
+connections held**.
+
+| Phase | Boundary | What happens | DB connections held |
+| --- | --- | --- | --- |
+| **1. Claim** | `TransactionTemplate` (`@Transactional`) | Acquire a HikariCP connection; atomically claim the row — `claimForSettlement()` issues a conditional `UPDATE ... WHERE status = :expected` that takes an exclusive row lock and transitions `VERIFIED → SETTLING`; commit and release the connection to the pool. | **1, briefly** |
+| **2. Wire broadcast** | **non-transactional** | Serialize the little-endian wire transaction in-process from pure-Java primitives (`ByteBuffer` / `ByteArrayOutputStream` with `LITTLE_ENDIAN` ordering plus hand-rolled `CompactU16` shortvec encoding — zero Web3 SDK), fetch a recent blockhash, broadcast the raw wire bytes to Solana RPC, and await the confirmed-commitment response. | **0** |
+| **3. Finalize** | `TransactionTemplate` (`@Transactional`) | Re-acquire a fresh HikariCP connection; transition `SETTLING → SETTLED` (or `SETTLEMENT_FAILED`), persist the on-chain `tx_signature` and audit trail; commit and release the connection. | **1, briefly** |
+
+```
+  ┌──────────────────────┐      ┌──────────────────────────────────────────┐      ┌──────────────────────┐
+  │ PHASE 1              │      │ PHASE 2                                 │      │ PHASE 3              │
+  │ @Transactional       │      │ NON-TRANSACTIONAL (Solana RPC)          │      │ @Transactional       │
+  │                      │      │                                          │      │                      │
+  │ acquire HikariCP conn│      │ 0 HikariCP connections held              │      │ acquire HikariCP conn│
+  │ row-lock claim       │ ───▶ │ little-endian wire tx (pure Java)        │ ───▶ │ SETTLING → SETTLED / │
+  │ VERIFIED → SETTLING  │      │ getLatestBlockhash ────────▶ RPC         │      │   SETTLEMENT_FAILED  │
+  │ COMMIT · release conn│      │ sendTransaction ───────────▶ RPC         │      │ persist tx_signature │
+  │                      │      │ await confirmed (400 ms – 2 s+)          │      │ COMMIT · release conn│
+  └──────────────────────┘      │                                          │      └──────────────────────┘
+                                │  ═══════════════════════════════════════  │
+                                │  ║   ZERO DB CONNECTIONS HELD HERE      ║  │
+                                │  ═══════════════════════════════════════  │
+                                └──────────────────────────────────────────┘
+```
+
+Failure handling is deterministic and fail-closed:
+
+- **Blockhash unavailable (pre-broadcast).** No bytes were ever sent, so the
+  claim is released back to `VERIFIED` and the channel remains retryable.
+- **Ambiguous broadcast** (RPC timeout or lost response after send). The record
+  lands in the terminal `SETTLEMENT_FAILED` state rather than reverting to
+  `VERIFIED`, because the transaction may already have landed on-chain; a retry
+  must never re-broadcast and double-spend.
 
 ## 7. Quickstart & Verification
 
@@ -954,29 +1017,37 @@ public class CustomProgramEscrowVerifier implements EscrowBalanceProvider {
     │                              V3__add_settlement_tx_signature.sql,
     │                              V4__seed_compliance_demo_data.sql
     └── test
-        ├── java/...              14 test classes (53 tests)
+        ├── java/...              23 test classes (84 tests)
         └── resources/application-test.yml   # H2 (PostgreSQL mode) + mock RPC
 ```
 
 ## 11. Testing
 
-The suite runs **53 tests** across 14 classes with JUnit 5, Mockito, and MockMvc:
+The suite runs **84 tests** across 23 classes with JUnit 5, Mockito, and MockMvc:
 
 | Test class | Focus |
 | --- | --- |
 | `AddressRiskEvaluatorTest` | OFAC / drainer blocklist, `CLEAR_TO_TRANSACT` / `BLOCKED`, malformed address → 400 |
 | `X402DiscoveryControllerTest` | `GET /.well-known/x402.json` discovery document |
+| `X402ChallengeConfigurationIntegrationTest` | 402 challenge + discovery document agree on configured network/asset/unit/price/escrow |
+| `X402PaymentFilterTest` | filter failure-status matrix; sanitized errors with no SQL/class-name leakage |
 | `X402ProtocolIntegrationTest` | MockMvc: 402 challenge, valid voucher → 200, replay → 403, tampered signature → 403 |
-| `SettlementControllerIntegrationTest` | sweep endpoint → `VERIFIED → SETTLED` + `tx_signature` |
+| `X402ReplayHardeningIntegrationTest` | restart replay → `403 PAYMENT_REJECTED`; malformed header → sanitized `400` |
+| `GatewayExceptionHandlerTest` | sanitized 403/500 bodies without internal paths or exception text |
+| `SettlementControllerIntegrationTest` | sweep endpoint → `VERIFIED → SETTLED` + `tx_signature`; admin-key 401s |
 | `ChannelSettlementServiceTest` | sweep transaction build, blockhash, sign, broadcast |
-| `ChannelVoucherVerifier` (via integration) | nonce watermark, ceiling, signature checks |
+| `SettlementTransactionBoundaryIntegrationTest` | no DB transaction held across `sendTransaction`; ambiguous broadcast → `SETTLEMENT_FAILED` |
+| `SettlementConcurrencyIntegrationTest` | two concurrent sweeps → exactly one on-chain broadcast |
+| `ChannelVoucherVerifierConcurrencyTest` | 32-thread identical-nonce barrier → exactly 1 winner (`AtomicLong` CAS) |
 | `SolanaEscrowVerifierTest` | mock-mode ceiling, cache TTL, fail-closed empty balance |
 | `PaymentAuditServiceTest` | append-only record creation |
 | `PaymentAuditRepositoryTest` | unique `(channel_id, nonce)` constraint, lookups |
 | `SolanaRpcClientTest` | JSON-RPC request/response, mock signatures, fail-closed |
-| `CryptoPrimitivesTest` | Base58, compact-u16, Ed25519 round-trips |
+| `CryptoPrimitivesTest` | Base58, compact-u16, Ed25519 round-trips + TypeScript golden vectors |
 | `SolanaWireTransactionBuilderTest` | account sorting, header, discriminator, wire bytes |
 | `RwaAttestationIntegrationTest` | `POST /api/v1/rwa/attest`: unpaid → 402 challenge; paid → 200 + `PAYMENT-RESPONSE` + compliance verdict |
+| `RwaAttestationMockModeIntegrationTest` | fail-closed attestation with `solana.rpc.mock-mode=true` and an unroutable RPC URL |
+| `SolanaRpcAdapterMockModeTest` | mock-mode wallet existence with zero HTTP calls |
 | `AuditDashboardServiceTest` | metrics aggregation: attestation/payment counts, fail-closed block rate, recent-transaction merge |
 | `AuditControllerIntegrationTest` | `GET /api/v1/rwa/audit` — un-gated read endpoint returns metrics + recent transactions |
 
@@ -987,6 +1058,57 @@ The MockMvc integration tests verify the five mandated protocol outcomes:
 3. Tampered signature → `403 Forbidden` (fail-closed).
 4. Replayed/stale nonce → `403 Forbidden` with audit logging.
 5. Insufficient channel balance → fail-closed rejection.
+
+### 4-Gate Verification Battery
+
+The hardened build is gated by four automated verification gates, each pinning a
+specific architectural invariant to a deterministic test (run offline with
+`mvn test -Dsolana.rpc.mock-mode=true`):
+
+**Gate 1 — Transactional Boundary & Admin Isolation**
+
+- Validates that outbound Solana RPC calls are decoupled from `@Transactional`
+  boundaries. `SettlementTransactionBoundaryIntegrationTest` instruments
+  `sendTransaction` with
+  `TransactionSynchronizationManager.isActualTransactionActive()` and asserts it
+  observes **no** active database transaction (the HikariCP connection is back in
+  the pool); an ambiguous broadcast lands in `SETTLEMENT_FAILED`, and a
+  pre-broadcast blockhash miss releases the claim back to `VERIFIED`.
+- Enforces constant-time authentication on the admin settlement endpoints via
+  `SettlementAdminInterceptor` (`MessageDigest.isEqual` over the `X-Admin-Key`
+  header); `SettlementControllerIntegrationTest` asserts missing and invalid keys
+  are rejected `401` without mutating channel state.
+
+**Gate 2 — Cross-Language Wire Conformance**
+
+- Cryptographically pins the TypeScript MCP client vouchers against the Spring
+  Boot backend's canonical payload reconstruction. `CryptoPrimitivesTest` and the
+  MCP server's `ed25519.test.js` assert the **same** golden vector
+  (`chan_smoke_test_001`, amount `5000`, nonce `1`): the SHA-256-seeded payer
+  pubkey `2uc1Wmo6jxvAo6mX1hTcYyswBeArV8mHc6aNz3wYeVtn`, the identical canonical
+  payload hex, and the identical Ed25519 signature — validated byte-for-byte
+  against RFC 8032 Ed25519 golden test vectors. Zero endianness or padding drift
+  between the two languages.
+
+**Gate 3 — Concurrency Invariants & Anti-Replay**
+
+- **In-memory hot path.** `ChannelVoucherVerifierConcurrencyTest` raises a
+  32-thread barrier that presents the **identical signed nonce** simultaneously;
+  the `AtomicLong.compareAndSet` watermark CAS admits exactly **1** authorized
+  winner and rejects **31** replays.
+- **Persistence cold path.** `SettlementConcurrencyIntegrationTest` drives two
+  real sweeps against the H2 row lock + conditional state transition and asserts
+  exactly **one** on-chain broadcast per settlement cycle (the losing sweep never
+  reaches `sendTransaction`).
+
+**Gate 4 — Hermetic Offline Execution**
+
+- The entire suite runs with `solana.rpc.mock-mode=true` and passes **84/84**
+  tests with no outbound dials to external validators; the mock branches in
+  `SolanaRpcClient` and `SolanaRpcAdapter` short-circuit before any JDK
+  `HttpClient`/`RestClient` send. Compliance screening fails closed
+  deterministically — no flaky socket retries, no `ConnectException` /
+  `UnknownHostException` paths.
 
 The project targets **>95% coverage** for the cryptographic (`serialization`)
 and filter components.
