@@ -49,21 +49,36 @@ public class SolanaRpcAdapter {
      */
     public static final long DEFAULT_MINT_RENT_EXEMPTION = 1_461_600L;
 
+    /**
+     * System-program owner used by the deterministic mock-mode wallet. Any non-null
+     * owner makes {@link AccountInfo#exists()} true, simulating an existing
+     * system-owned wallet without touching the network.
+     */
+    public static final String MOCK_WALLET_OWNER = "11111111111111111111111111111111";
+
     private final RestClient restClient;
     private final String rpcUrl;
     private final long baselinePriorityFee;
+    private final boolean mockMode;
     private final AtomicLong requestId = new AtomicLong(1);
 
     public SolanaRpcAdapter(RestClient.Builder restClientBuilder,
                             @Value("${solana.rpc.url}") String rpcUrl,
-                            @Value("${solana.rpc.priority-fee-baseline-micro-lamports:1000}") long baselinePriorityFee) {
+                            @Value("${solana.rpc.priority-fee-baseline-micro-lamports:1000}") long baselinePriorityFee,
+                            @Value("${solana.rpc.mock-mode:false}") boolean mockMode) {
         this.restClient = restClientBuilder.build();
         this.rpcUrl = rpcUrl;
         this.baselinePriorityFee = baselinePriorityFee;
+        this.mockMode = mockMode;
     }
 
     /**
      * Queries live Devnet state for a wallet address.
+     *
+     * <p>In mock mode ({@code solana.rpc.mock-mode=true}) no network call is made:
+     * a deterministic, system-owned existing wallet is returned so the documented
+     * offline demo and test suite are reproducible. The failure path (missing
+     * account) remains unit-testable by mocking this adapter.
      *
      * @param walletAddress base58 wallet public key
      * @return parsed account info; {@code exists()} is {@code false} when the
@@ -71,6 +86,11 @@ public class SolanaRpcAdapter {
      * @throws SolanaRpcException on network failure, HTTP error, or malformed/error response
      */
     public AccountInfo getAccountInfo(String walletAddress) {
+        if (mockMode) {
+            log.debug("RWA RPC mock mode: synthesising an existing wallet account for {}", walletAddress);
+            return new AccountInfo(MOCK_WALLET_OWNER, 0L, false, 0L);
+        }
+
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("jsonrpc", JSONRPC_VERSION);
         params.put("method", "getAccountInfo");

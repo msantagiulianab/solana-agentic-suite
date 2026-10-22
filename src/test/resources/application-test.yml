@@ -24,6 +24,12 @@ spring:
     # normally; this only guards against a pre-populated test schema.
     baseline-on-migrate: true
     baseline-version: 1
+    # V4 is a PostgreSQL-only idempotent seed
+    # (INSERT ... ON CONFLICT (col) DO UPDATE SET ...), a syntax H2 2.x rejects.
+    # The seed is demo data that no test depends on (every integration test
+    # creates its own fixtures), so the H2 profile stops at V3 and still
+    # exercises the production DDL for V1-V3.
+    target: "3"
 
 solana:
   rpc:
@@ -34,3 +40,8 @@ solana:
   gateway:
     treasury-pubkey: "4Nd1mBQtrMJVYVfKf2PJy9NZGibCcTRxpETqdrBHu19Y"
     mock-private-key: "4wBqpZM9xaSheZzJSMawUKKwhdpChKbZ5eu5ky4Vigw"
+
+gateway:
+  settlement:
+    # Deterministic shared secret for the settlement admin gate in tests.
+    admin-key: "dev-admin-key"

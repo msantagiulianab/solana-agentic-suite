@@ -3,6 +3,7 @@ package com.msb.solana.rwa.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.msb.solana.gateway.SolanaPaymentGatewayApplication;
 import com.msb.solana.gateway.model.PaymentVoucher;
+import com.msb.solana.gateway.repository.PaymentAuditRepository;
 import com.msb.solana.gateway.serialization.Base58;
 import com.msb.solana.gateway.service.ChannelVoucherVerifier;
 import com.msb.solana.rwa.entity.AssetToken;
@@ -68,6 +69,9 @@ class RwaAttestationIntegrationTest {
     private ChannelVoucherVerifier voucherVerifier;
 
     @Autowired
+    private PaymentAuditRepository paymentAuditRepository;
+
+    @Autowired
     private InvestorRepository investorRepository;
 
     @Autowired
@@ -81,6 +85,8 @@ class RwaAttestationIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        // Isolate the shared H2 ledger and the in-memory watermark between tests.
+        paymentAuditRepository.deleteAll();
         voucherVerifier.resetState();
 
         Ed25519KeyPairGenerator keyGen = new Ed25519KeyPairGenerator();

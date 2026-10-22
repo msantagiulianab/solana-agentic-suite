@@ -56,3 +56,10 @@ solana:
     # signs sweep transactions. Never use a funded key in production; this is the
     # deterministic mock/default seed used by the sweep engine.
     mock-private-key: ${SOLANA_GATEWAY_MOCK_PRIVATE_KEY:4wBqpZM9xaSheZzJSMawUKKwhdpChKbZ5eu5ky4Vigw}
+
+gateway:
+  settlement:
+    # Shared secret required in the X-Admin-Key header to trigger an on-chain
+    # settlement sweep. The default is a deterministic dev/test secret only;
+    # every deployed environment must override it via SETTLEMENT_ADMIN_KEY.
+    admin-key: ${SETTLEMENT_ADMIN_KEY:dev-admin-key}

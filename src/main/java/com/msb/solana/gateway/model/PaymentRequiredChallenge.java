@@ -2,6 +2,13 @@ package com.msb.solana.gateway.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+/**
+ * x402 v2 payment requirement returned in the HTTP 402 challenge.
+ *
+ * <p>Instances are produced exclusively by
+ * {@link com.msb.solana.gateway.service.X402ChallengeFactory} so the challenge and
+ * the discovery document share one configuration source.
+ */
 public record PaymentRequiredChallenge(
     @JsonProperty("x402Version") int x402Version,
     @JsonProperty("scheme") String scheme,
@@ -12,16 +19,4 @@ public record PaymentRequiredChallenge(
     @JsonProperty("unit") String unit,
     @JsonProperty("message") String message
 ) {
-    public static PaymentRequiredChallenge defaultSolanaChallenge(String escrowPubkey, long priceAtomicUnits) {
-        return new PaymentRequiredChallenge(
-            2,
-            "channel",
-            "solana:devnet",
-            escrowPubkey,
-            "USDC",
-            priceAtomicUnits,
-            "per-call",
-            "Payment required via Solana payment channel or gasless voucher"
-        );
-    }
 }

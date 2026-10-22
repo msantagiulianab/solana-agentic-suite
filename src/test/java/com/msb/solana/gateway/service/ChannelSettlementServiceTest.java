@@ -2,6 +2,7 @@ package com.msb.solana.gateway.service;
 
 import com.msb.solana.gateway.entity.PaymentAuditRecord;
 import com.msb.solana.gateway.entity.PaymentAuditStatus;
+import com.msb.solana.gateway.exception.SettlementConflictException;
 import com.msb.solana.gateway.model.SettlementResult;
 import com.msb.solana.gateway.repository.PaymentAuditRepository;
 import com.msb.solana.gateway.rpc.SolanaRpcClient;
@@ -16,6 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +42,25 @@ class ChannelSettlementServiceTest {
     private static final String MOCK_PRIVATE_KEY = "4wBqpZM9xaSheZzJSMawUKKwhdpChKbZ5eu5ky4Vigw";
     private static final String BLOCKHASH = "11111111111111111111111111111111";
 
+    /**
+     * No-op transaction manager so the service's {@code TransactionTemplate} runs
+     * its callbacks inline without a real JPA transaction in this offline unit test.
+     */
+    private static final PlatformTransactionManager NOOP_TRANSACTION_MANAGER = new PlatformTransactionManager() {
+        @Override
+        public TransactionStatus getTransaction(TransactionDefinition definition) {
+            return new SimpleTransactionStatus();
+        }
+
+        @Override
+        public void commit(TransactionStatus status) {
+        }
+
+        @Override
+        public void rollback(TransactionStatus status) {
+        }
+    };
+
     @Mock
     private PaymentAuditRepository auditRepository;
 
@@ -57,6 +81,7 @@ class ChannelSettlementServiceTest {
     void setUp() {
         service = new ChannelSettlementService(
                 auditRepository, rpcClient, transactionBuilder, keypairService,
+                NOOP_TRANSACTION_MANAGER,
                 TREASURY, MOCK_PRIVATE_KEY);
     }
 
@@ -68,6 +93,10 @@ class ChannelSettlementServiceTest {
         SolanaKeypair payer = realKeypairService.fromSeed(realKeypairService.deriveSeed("test-payer"));
 
         when(auditRepository.findTopByChannelIdOrderByNonceDesc("chan_1")).thenReturn(Optional.of(record));
+        when(auditRepository.claimForSettlement(any(), eq(PaymentAuditStatus.VERIFIED), eq(PaymentAuditStatus.SETTLING)))
+                .thenReturn(1);
+        when(auditRepository.completeSettlement(any(), eq(PaymentAuditStatus.SETTLING),
+                eq(PaymentAuditStatus.SETTLED), eq("mockTxSignature"))).thenReturn(1);
         when(rpcClient.getLatestBlockhash()).thenReturn(Optional.of(BLOCKHASH));
         when(keypairService.fromBase58SecretKey(MOCK_PRIVATE_KEY)).thenReturn(payer);
         when(transactionBuilder.serializeAndSign(anyList(), eq(BLOCKHASH), anyList())).thenReturn("base64Tx");
@@ -80,15 +109,18 @@ class ChannelSettlementServiceTest {
         assertThat(result.txSignature()).isEqualTo("mockTxSignature");
         assertThat(result.timestamp()).isPositive();
 
-        assertThat(record.getStatus()).isEqualTo(PaymentAuditStatus.SETTLED);
-        assertThat(record.getTxSignature()).isEqualTo("mockTxSignature");
+        // The entity is no longer mutated in memory: the guarded bulk transitions
+        // are the authoritative state change.
+        verify(auditRepository).claimForSettlement(any(), eq(PaymentAuditStatus.VERIFIED),
+                eq(PaymentAuditStatus.SETTLING));
+        verify(auditRepository).completeSettlement(any(), eq(PaymentAuditStatus.SETTLING),
+                eq(PaymentAuditStatus.SETTLED), eq("mockTxSignature"));
+        verify(auditRepository, never()).save(any(PaymentAuditRecord.class));
 
         ArgumentCaptor<List<SolanaInstruction>> instructions = ArgumentCaptor.forClass(List.class);
         verify(transactionBuilder).serializeAndSign(instructions.capture(), eq(BLOCKHASH), anyList());
         SolanaInstruction transfer = instructions.getValue().get(0);
         assertThat(readU64(transfer.data(), 4)).isEqualTo(5_000L);
-
-        verify(auditRepository).save(record);
     }
 
     @Test
@@ -118,29 +150,36 @@ class ChannelSettlementServiceTest {
     }
 
     @Test
-    @DisplayName("settleChannel fails closed when a fresh blockhash cannot be fetched")
-    void settleChannel_throwsWhenBlockhashUnavailable() {
+    @DisplayName("settleChannel releases the claim when a fresh blockhash cannot be fetched")
+    void settleChannel_blockhashUnavailable_releasesClaim() {
         PaymentAuditRecord record = PaymentAuditRecord.create(
                 "chan_3", "payerPubkey", 5_000L, 10L, "voucherSig", PaymentAuditStatus.VERIFIED);
         when(auditRepository.findTopByChannelIdOrderByNonceDesc("chan_3")).thenReturn(Optional.of(record));
+        when(auditRepository.claimForSettlement(any(), eq(PaymentAuditStatus.VERIFIED), eq(PaymentAuditStatus.SETTLING)))
+                .thenReturn(1);
         when(rpcClient.getLatestBlockhash()).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.settleChannel("chan_3"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("blockhash");
 
-        assertThat(record.getStatus()).isEqualTo(PaymentAuditStatus.VERIFIED);
+        // No broadcast was attempted, so the claim is released and the channel retryable.
+        verify(auditRepository).releaseSettlementClaim(
+                any(), eq(PaymentAuditStatus.SETTLING), eq(PaymentAuditStatus.VERIFIED));
+        verify(auditRepository, never()).markSettlementFailed(any(), any(), any());
         verify(rpcClient, never()).sendTransaction(any());
     }
 
     @Test
-    @DisplayName("settleChannel fails closed when the node rejects the broadcast")
-    void settleChannel_throwsWhenBroadcastFails() {
+    @DisplayName("settleChannel marks the record SETTLEMENT_FAILED on an ambiguous broadcast failure")
+    void settleChannel_ambiguousBroadcastFailure_marksSettlementFailed() {
         PaymentAuditRecord record = PaymentAuditRecord.create(
                 "chan_4", "payerPubkey", 5_000L, 10L, "voucherSig", PaymentAuditStatus.VERIFIED);
         SolanaKeypair payer = realKeypairService.fromSeed(realKeypairService.deriveSeed("test-payer"));
 
         when(auditRepository.findTopByChannelIdOrderByNonceDesc("chan_4")).thenReturn(Optional.of(record));
+        when(auditRepository.claimForSettlement(any(), eq(PaymentAuditStatus.VERIFIED), eq(PaymentAuditStatus.SETTLING)))
+                .thenReturn(1);
         when(rpcClient.getLatestBlockhash()).thenReturn(Optional.of(BLOCKHASH));
         when(keypairService.fromBase58SecretKey(MOCK_PRIVATE_KEY)).thenReturn(payer);
         when(transactionBuilder.serializeAndSign(anyList(), eq(BLOCKHASH), anyList())).thenReturn("base64Tx");
@@ -150,8 +189,29 @@ class ChannelSettlementServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("sendTransaction");
 
-        assertThat(record.getStatus()).isEqualTo(PaymentAuditStatus.VERIFIED);
-        verify(auditRepository, never()).save(any(PaymentAuditRecord.class));
+        // The record must never return to VERIFIED: an ambiguous broadcast could have
+        // landed on-chain, so the claim moves to a terminal non-VERIFIED state.
+        verify(auditRepository).markSettlementFailed(
+                any(), eq(PaymentAuditStatus.SETTLING), eq(PaymentAuditStatus.SETTLEMENT_FAILED));
+        verify(auditRepository, never()).releaseSettlementClaim(any(), any(), any());
+        verify(auditRepository, never()).completeSettlement(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("settleChannel never broadcasts when another sweep already holds the claim")
+    void settleChannel_neverBroadcastsWhenClaimLost() {
+        PaymentAuditRecord record = PaymentAuditRecord.create(
+                "chan_5", "payerPubkey", 5_000L, 10L, "voucherSig", PaymentAuditStatus.VERIFIED);
+        when(auditRepository.findTopByChannelIdOrderByNonceDesc("chan_5")).thenReturn(Optional.of(record));
+        when(auditRepository.claimForSettlement(any(), eq(PaymentAuditStatus.VERIFIED), eq(PaymentAuditStatus.SETTLING)))
+                .thenReturn(0);
+
+        assertThatThrownBy(() -> service.settleChannel("chan_5"))
+                .isInstanceOf(SettlementConflictException.class)
+                .hasMessageContaining("already in progress");
+
+        verifyNoInteractions(rpcClient, transactionBuilder, keypairService);
+        verify(auditRepository, never()).completeSettlement(any(), any(), any(), any());
     }
 
     private static long readU64(byte[] data, int offset) {

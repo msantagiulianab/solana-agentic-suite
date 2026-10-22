@@ -10,7 +10,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.HexFormat;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -101,5 +104,47 @@ class CryptoPrimitivesTest {
 
         boolean verified = verifier.verifyBase58(tamperedBytes, base58Sig, payerPubkey);
         assertFalse(verified, "Tampered payload must fail verification");
+    }
+
+    @Test
+    @DisplayName("Should match TypeScript golden vectors for canonical payload and Ed25519 signature")
+    void testGoldenVectorParityWithTypeScript() throws Exception {
+        // Golden vectors generated with the exact `smoke-test.sh` algorithm
+        // (seed = sha256("smoke-test-payer-seed-v1"), channel "chan_smoke_test_001",
+        // amount 5000, nonce 1). These pin the JVM to the TypeScript byte layout.
+        String goldenPayerPubkey = "2uc1Wmo6jxvAo6mX1hTcYyswBeArV8mHc6aNz3wYeVtn";
+        String goldenPayloadHex =
+                "583430325f4348414e4e454c5f56313a13006368616e5f736d6f6b655f746573745f30303188130000000000000100000000000000";
+        String goldenSigBase58 =
+                "3zKcze3Q9DDRui2YCMeTPsBs3mxymxMN3oCvNDVKkrbgtZsR6CVfrLaMPd1kVHjoiAYEqTLNYxAzeABmdBMWSWhm";
+
+        byte[] seed = MessageDigest.getInstance("SHA-256")
+                .digest("smoke-test-payer-seed-v1".getBytes(StandardCharsets.UTF_8));
+
+        Ed25519PrivateKeyParameters privKey = new Ed25519PrivateKeyParameters(seed, 0);
+        Ed25519PublicKeyParameters pubKey = privKey.generatePublicKey();
+        String payerPubkeyBase58 = Base58.encode(pubKey.getEncoded());
+        assertEquals(goldenPayerPubkey, payerPubkeyBase58,
+                "Derived payer public key must match the TypeScript golden vector");
+
+        PaymentVoucher voucher = new PaymentVoucher(
+                "chan_smoke_test_001",
+                payerPubkeyBase58,
+                5000L,
+                1L,
+                ""
+        );
+
+        byte[] canonicalBytes = voucher.getCanonicalPayload();
+        String payloadHex = HexFormat.of().formatHex(canonicalBytes);
+        assertEquals(goldenPayloadHex, payloadHex,
+                "Canonical payload must match the TypeScript golden vector byte-for-byte");
+
+        Ed25519Signer signer = new Ed25519Signer();
+        signer.init(true, privKey);
+        signer.update(canonicalBytes, 0, canonicalBytes.length);
+        String sigBase58 = Base58.encode(signer.generateSignature());
+        assertEquals(goldenSigBase58, sigBase58,
+                "Ed25519 signature must match the TypeScript golden vector");
     }
 }

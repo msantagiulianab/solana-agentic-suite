@@ -51,6 +51,7 @@ class X402ProtocolIntegrationTest {
     @BeforeEach
     void setUp() {
         // Isolate each test run from in-memory singleton state
+        auditRepository.deleteAll();
         voucherVerifier.resetState();
 
         Ed25519KeyPairGenerator keyGen = new Ed25519KeyPairGenerator();

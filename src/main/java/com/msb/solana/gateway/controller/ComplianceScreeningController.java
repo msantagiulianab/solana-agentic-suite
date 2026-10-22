@@ -3,6 +3,7 @@ package com.msb.solana.gateway.controller;
 import com.msb.solana.gateway.compliance.AddressRiskEvaluator;
 import com.msb.solana.gateway.compliance.ScreenAddressRequest;
 import com.msb.solana.gateway.compliance.ScreeningResult;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,7 +21,7 @@ public class ComplianceScreeningController {
     }
 
     @PostMapping("/screen-address")
-    public ResponseEntity<ScreeningResult> screenAddress(@RequestBody ScreenAddressRequest request) {
+    public ResponseEntity<ScreeningResult> screenAddress(@Valid @RequestBody ScreenAddressRequest request) {
         ScreeningResult result = addressRiskEvaluator.evaluate(request.address());
         return ResponseEntity.ok(result);
     }

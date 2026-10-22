@@ -2,6 +2,7 @@ package com.msb.solana.gateway.service;
 
 import com.msb.solana.gateway.entity.PaymentAuditRecord;
 import com.msb.solana.gateway.entity.PaymentAuditStatus;
+import com.msb.solana.gateway.exception.DuplicateVoucherNonceException;
 import com.msb.solana.gateway.model.PaymentVoucher;
 import com.msb.solana.gateway.repository.PaymentAuditRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -10,8 +11,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,7 +34,7 @@ class PaymentAuditServiceTest {
         PaymentVoucher voucher = new PaymentVoucher(
                 "chan_1", "payerPubkeyBase58", 5000L, 1L, "signatureBase58");
 
-        when(repository.save(any(PaymentAuditRecord.class)))
+        when(repository.saveAndFlush(any(PaymentAuditRecord.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
         PaymentAuditRecord result = service.recordVerifiedVoucher(voucher);
@@ -43,6 +46,24 @@ class PaymentAuditServiceTest {
         assertThat(result.getSignature()).isEqualTo("signatureBase58");
         assertThat(result.getStatus()).isEqualTo(PaymentAuditStatus.VERIFIED);
 
-        verify(repository).save(any(PaymentAuditRecord.class));
+        verify(repository).saveAndFlush(any(PaymentAuditRecord.class));
+    }
+
+    @Test
+    @DisplayName("A unique-constraint violation is translated into a typed duplicate-nonce failure")
+    void recordVerifiedVoucher_duplicateNonce_throwsTypedException() {
+        PaymentVoucher voucher = new PaymentVoucher(
+                "chan_1", "payerPubkeyBase58", 5000L, 1L, "signatureBase58");
+
+        when(repository.saveAndFlush(any(PaymentAuditRecord.class)))
+                .thenThrow(new DataIntegrityViolationException(
+                        "could not execute statement; SQL [insert into payment_audit_ledger ...]; "
+                                + "constraint [uk_payment_audit_ledger_channel_nonce]"));
+
+        assertThatThrownBy(() -> service.recordVerifiedVoucher(voucher))
+                .isInstanceOf(DuplicateVoucherNonceException.class)
+                .hasMessageContaining("already recorded")
+                .hasMessageNotContaining("SQL")
+                .hasMessageNotContaining("constraint");
     }
 }

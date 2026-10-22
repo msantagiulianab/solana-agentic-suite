@@ -8,12 +8,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -34,6 +36,9 @@ class SettlementControllerIntegrationTest {
     @Autowired
     private PaymentAuditRepository auditRepository;
 
+    @Value("${gateway.settlement.admin-key}")
+    private String adminKey;
+
     private String channelId;
 
     @BeforeEach
@@ -52,7 +57,8 @@ class SettlementControllerIntegrationTest {
     @Test
     @DisplayName("POST sweep settles the channel and persists the transaction signature")
     void sweepEndpoint_settlesChannelEndToEnd() throws Exception {
-        mockMvc.perform(post("/api/v1/settlement/channels/{channelId}/sweep", channelId))
+        mockMvc.perform(post("/api/v1/settlement/channels/{channelId}/sweep", channelId)
+                        .header("X-Admin-Key", adminKey))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.channelId").value(channelId))
                 .andExpect(jsonPath("$.settledAmountAtomic").value(5_000))
@@ -62,5 +68,28 @@ class SettlementControllerIntegrationTest {
         PaymentAuditRecord settled = auditRepository.findByChannelId(channelId).get(0);
         assertThat(settled.getStatus()).isEqualTo(PaymentAuditStatus.SETTLED);
         assertThat(settled.getTxSignature()).isNotBlank();
+    }
+
+    @Test
+    @DisplayName("POST sweep without an X-Admin-Key header is rejected with 401")
+    void sweepEndpoint_missingAdminKey_isUnauthorized() throws Exception {
+        mockMvc.perform(post("/api/v1/settlement/channels/{channelId}/sweep", channelId))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", is("UNAUTHORIZED")));
+
+        PaymentAuditRecord record = auditRepository.findByChannelId(channelId).get(0);
+        assertThat(record.getStatus()).isEqualTo(PaymentAuditStatus.VERIFIED);
+    }
+
+    @Test
+    @DisplayName("POST sweep with an invalid X-Admin-Key header is rejected with 401")
+    void sweepEndpoint_invalidAdminKey_isUnauthorized() throws Exception {
+        mockMvc.perform(post("/api/v1/settlement/channels/{channelId}/sweep", channelId)
+                        .header("X-Admin-Key", "wrong-admin-key"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", is("UNAUTHORIZED")));
+
+        PaymentAuditRecord record = auditRepository.findByChannelId(channelId).get(0);
+        assertThat(record.getStatus()).isEqualTo(PaymentAuditStatus.VERIFIED);
     }
 }

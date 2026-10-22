@@ -122,13 +122,18 @@ public class PaymentAuditRecord {
     }
 
     /**
-     * Transitions a verified voucher record into the settled state after its
-     * cumulative amount has been swept on-chain. The only legal transition is
-     * {@code VERIFIED -> SETTLED}; all voucher fields remain immutable.
+     * Transitions a verified (or claimed, in-flight) voucher record into the
+     * settled state after its cumulative amount has been swept on-chain. The only
+     * legal transitions are {@code VERIFIED -> SETTLED} and
+     * {@code SETTLING -> SETTLED}; all voucher fields remain immutable.
+     *
+     * <p>Production settlement uses the guarded bulk transitions on
+     * {@code PaymentAuditRepository} so the claim happens before the broadcast;
+     * this method remains for in-memory fixtures and defensive integrity checks.
      */
     public void markSettled(String txSignature) {
-        if (this.status != PaymentAuditStatus.VERIFIED) {
-            throw new IllegalStateException("Only VERIFIED records can transition to SETTLED");
+        if (this.status != PaymentAuditStatus.VERIFIED && this.status != PaymentAuditStatus.SETTLING) {
+            throw new IllegalStateException("Only VERIFIED or SETTLING records can transition to SETTLED");
         }
         if (txSignature == null || txSignature.isBlank()) {
             throw new IllegalArgumentException("txSignature is required for settlement");
